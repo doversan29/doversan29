@@ -102,10 +102,43 @@ export async function GET(request: NextRequest) {
                         odds: bestOdds
                     });
 
+                    import { db } from '@/lib/db/client';
+                    import { matchAnalysis } from '@/lib/db/schema';
+                    import { sql } from 'drizzle-orm';
+
+                    // ... imports
+
+                    // ... inside loop ...
                     // Only alert if Kelly recommends a bet
                     if (kellyResult.recommendation === 'BET' || kellyResult.recommendation === 'CAUTION') {
                         // Double check edge is sufficient
                         const edge = kellyResult.expectedValue; // This is %
+
+                        // PERSIST TO DB (v2.1 CLV Baseline)
+                        // We save this prediction so we can track Closing Line Value later
+                        await db.insert(matchAnalysis).values({
+                            fixtureId: fixture.fixture.id,
+                            homeTeam: fixture.teams.home.name,
+                            awayTeam: fixture.teams.away.name,
+                            leagueName: fixture.league.name,
+                            matchDate: new Date(fixture.fixture.date),
+                            predictedOutcome: pick === 'HOME WIN' ? 'HOME' : 'AWAY',
+                            aiProbability: prob * 100,
+                            expectedGoalsHome: prediction.expectedGoalsHome,
+                            expectedGoalsAway: prediction.expectedGoalsAway,
+                            oddsRecommended: bestOdds, // The odds we "took" implicitly
+                            valueEdge: edge,
+                            strategyUsed: 'sniper_v2_cron',
+                            analysisReasoning: `Sniper Alert: Model ${Math.round(prob * 100)}% vs Odds ${bestOdds}`
+                        }).onConflictDoUpdate({
+                            target: matchAnalysis.fixtureId,
+                            set: {
+                                aiProbability: prob * 100,
+                                oddsRecommended: bestOdds,
+                                updatedAt: new Date()
+                            }
+                        });
+
 
                         await sendSniperAlert({
                             fixtureId: fixture.fixture.id,
@@ -119,6 +152,7 @@ export async function GET(request: NextRequest) {
                         });
                         alertsSent++;
                     }
+                    // ... rest of file
                 }
             }
 

@@ -8,6 +8,10 @@
         {
             "path": "/api/cron/update-calibration",
             "schedule": "0 3 * * *"
+        },
+        {
+            "path": "/api/cron/track-clv",
+            "schedule": "0 * * * *"
         }
     ]
 }

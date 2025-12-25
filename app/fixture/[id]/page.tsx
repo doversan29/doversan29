@@ -1,4 +1,6 @@
 import { calculatePoissonPrediction, calculateWeightedStats } from "@/lib/predictions";
+import { calibrateProbability } from "@/lib/analysis/calibration";
+import { analyzeRisk } from "@/lib/analysis/risk-model";
 import { format } from "date-fns";
 import { es } from 'date-fns/locale';
 import Link from "next/link";
@@ -149,7 +151,30 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
     const homeWeighted = calculateWeightedStats(homeStats, homeRecentStats, 0.3);
     const awayWeighted = calculateWeightedStats(awayStats, awayRecentStats, 0.3);
 
+    import { calculatePoissonPrediction, calculateWeightedStats } from "@/lib/predictions";
+    import { calibrateProbability } from "@/lib/analysis/calibration";
+    // ... imports ...
+
+    // ... inside FixturePage ...
+
     const prediction = calculatePoissonPrediction(homeWeighted, awayWeighted, leagueAvgHome, leagueAvgAway);
+
+    // v2.1 CALIBRATION
+    // Apply statistical correction based on historical accuracy
+    const [calibratedHomeStr, calibratedDrawStr, calibratedAwayStr] = await Promise.all([
+        calibrateProbability(fixture.league.id, prediction.homeWinProb),
+        calibrateProbability(fixture.league.id, prediction.drawProb),
+        calibrateProbability(fixture.league.id, prediction.awayWinProb)
+    ]);
+
+    // Override prediction probabilities with calibrated ones for display
+    // We normalize them again to ensure sum is ~1.0
+    const totalCalibrated = calibratedHomeStr + calibratedDrawStr + calibratedAwayStr;
+
+    // Update the prediction object with calibrated values
+    prediction.homeWinProb = calibratedHomeStr / totalCalibrated;
+    prediction.drawProb = calibratedDrawStr / totalCalibrated;
+    prediction.awayWinProb = calibratedAwayStr / totalCalibrated;
 
     // Calculate Value
     let valueAnalysis = undefined;
@@ -185,6 +210,18 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
                 <ArrowLeft className="w-4 h-4" /> Back to Matches
             </Link>
 
+            import {analyzeRisk} from "@/lib/analysis/risk-model";
+
+            // ... inside component ...
+            // v2.1 RISK ANALYSIS (Meta-Model)
+            const riskAnalysis = analyzeRisk(
+            prediction.homeWinProb, // Uses calibrated probs now
+            prediction.awayWinProb,
+            homeWeighted, // Stats normalized
+            awayWeighted
+            );
+
+            // ... EXPERT ANALYSIS SECTION (Modified) ...
             {/* EXPERT ANALYSIS SECTION (NEW) */}
             <div className="bg-gradient-to-br from-blue-900/40 to-slate-900 border border-blue-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-20 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -mr-10 -mt-10"></div>
@@ -194,13 +231,36 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
                             <User className="w-6 h-6 text-blue-400" />
                         </div>
                         <h3 className="text-xl font-bold text-white">Análisis del Experto</h3>
-                        {valueAnalysis?.isValue && (
-                            <span className="ml-auto bg-blue-500 text-white text-[10px] font-black px-2 py-1 rounded flex items-center gap-1 animate-bounce shadow-lg shadow-blue-500/50">
-                                <Gem className="w-3 h-3" /> VALUE BET
-                            </span>
-                        )}
+
+                        {/* Risk Flags or Value Badge */}
+                        <div className="ml-auto flex gap-2">
+                            {riskAnalysis.riskLevel === 'CRITICAL' || riskAnalysis.riskLevel === 'HIGH' ? (
+                                <span className="bg-red-500/90 text-white text-[10px] font-black px-2 py-1 rounded flex items-center gap-1 shadow-lg shadow-red-500/20">
+                                    <AlertCircle className="w-3 h-3" /> HIGH RISK
+                                </span>
+                            ) : valueAnalysis?.isValue ? (
+                                <span className="bg-emerald-500 text-white text-[10px] font-black px-2 py-1 rounded flex items-center gap-1 animate-bounce shadow-lg shadow-emerald-500/50">
+                                    <Gem className="w-3 h-3" /> VALUE BET
+                                </span>
+                            ) : null}
+                        </div>
 
                     </div>
+
+                    {/* Risk Warnings (Banner) */}
+                    {riskAnalysis.flags.length > 0 && (
+                        <div className="mb-4 bg-red-950/30 border border-red-500/20 rounded p-3">
+                            <p className="text-xs text-red-200 font-bold mb-1 uppercase tracking-wider">⚠️ Riesgos Detectados (Meta-Model)</p>
+                            <ul className="text-xs text-red-300 space-y-1">
+                                {riskAnalysis.flags.map((f, i) => (
+                                    <li key={i} className="flex gap-2">
+                                        <span className="font-bold">• {f.label}:</span> {f.description}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
                     <div className="prose prose-invert max-w-none">
                         <p className="text-blue-100 text-lg leading-relaxed whitespace-pre-line">
                             {expertAnalysis}
@@ -273,7 +333,10 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
                 <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
                     <div className="flex items-center gap-2 mb-6">
                         <TrendingUp className="w-5 h-5 text-blue-500" />
-                        <h3 className="font-bold text-lg text-slate-200">Win Probability (Poisson)</h3>
+                        <h3 className="font-bold text-lg text-slate-200">Win Probability</h3>
+                        <span className="text-[10px] bg-blue-900/50 text-blue-300 border border-blue-800 px-2 py-0.5 rounded-full">
+                            Calibrated v2.1
+                        </span>
                     </div>
 
                     <div className="space-y-6">
@@ -331,12 +394,24 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
 
                             <div className="p-4 bg-emerald-900/20 rounded-lg border border-emerald-900/50">
                                 <p className="text-xs text-emerald-500 uppercase tracking-wider mb-2 font-bold">Recommended Bet</p>
-                                <p className="text-lg font-medium text-emerald-100">
-                                    {winProb > 50 ? `${fixture.teams.home.name} to Win` :
-                                        lossProb > 50 ? `${fixture.teams.away.name} to Win` :
-                                            "Double Chance / Under 2.5 Goals"}
-                                </p>
-                                <p className="text-xs text-emerald-400/60 mt-1">Confidence: {Math.max(winProb, drawProb, lossProb)}%</p>
+
+                                {riskAnalysis.shouldBet ? (
+                                    <>
+                                        <p className="text-lg font-medium text-emerald-100">
+                                            {winProb > 50 ? `${fixture.teams.home.name} to Win` :
+                                                lossProb > 50 ? `${fixture.teams.away.name} to Win` :
+                                                    "Double Chance / Under 2.5 Goals"}
+                                        </p>
+                                        <p className="text-xs text-emerald-400/60 mt-1">Confidence: {Math.max(winProb, drawProb, lossProb)}%</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-lg font-medium text-slate-300">
+                                            ⚠️ SKIP / NO BET
+                                        </p>
+                                        <p className="text-xs text-red-400/80 mt-1">Blocked by Meta-Model: {riskAnalysis.flags[0]?.label || 'High Risk'}</p>
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>

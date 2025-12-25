@@ -1,4 +1,5 @@
-import { initializeBankroll, initializeSystemWeights } from './lib/db/queries';
+import { initializeBankroll, initializeSystemWeights } from '../lib/db/queries';
+
 
 /**
  * Script de inicialización de la base de datos

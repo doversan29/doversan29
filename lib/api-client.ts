@@ -24,6 +24,8 @@ export async function fetchApi(endpoint: string, params: Record<string, any> = {
         }
     });
 
+    console.log(`[API REQUEST] ${url.toString()} (Key: ${API_KEY ? 'Set' : 'Missing'})`);
+
     const res = await fetch(url.toString(), {
         headers: {
             'x-rapidapi-key': API_KEY || '',
@@ -35,7 +37,11 @@ export async function fetchApi(endpoint: string, params: Record<string, any> = {
         }
     });
 
+    console.log(`[API RESPONSE] Status: ${res.status}`);
+
     if (!res.ok) {
+        const text = await res.text();
+        console.error(`[API ERROR] ${res.status} - ${text}`);
         // Handle common API errors gracefully
         if (res.status === 429) {
             console.warn("API Rate Limit Exceeded");

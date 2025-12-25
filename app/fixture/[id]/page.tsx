@@ -152,10 +152,39 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
     const awayWeighted = calculateWeightedStats(awayStats, awayRecentStats, 0.3);
 
 
-    // ... inside component ...
-    // v2.1 RISK ANALYSIS (Meta-Model)
+    // Poisson Prediction
+    const prediction = calculatePoissonPrediction(homeWeighted, awayWeighted, leagueAvgHome, leagueAvgAway);
 
-    // ... inside component ...
+    // Calibrate Probabilities
+    if (prediction) {
+        prediction.homeWinProb = await calibrateProbability(fixture.league.id, prediction.homeWinProb);
+        prediction.drawProb = await calibrateProbability(fixture.league.id, prediction.drawProb);
+        prediction.awayWinProb = await calibrateProbability(fixture.league.id, prediction.awayWinProb);
+    }
+
+    // Calculate Probs for Display
+    const winProb = (prediction.homeWinProb * 100).toFixed(0);
+    const drawProb = (prediction.drawProb * 100).toFixed(0);
+    const lossProb = (prediction.awayWinProb * 100).toFixed(0);
+
+    // Value Bet Analysis
+    const valueAnalysis = realOdds ? calculateValue(
+        { home: prediction.homeWinProb, draw: prediction.drawProb, away: prediction.awayWinProb },
+        realOdds
+    ) : null;
+
+    // Generate Expert Analysis
+    const expertAnalysis = generateExpertAnalysis({
+        homeName: fixture.teams.home.name,
+        awayName: fixture.teams.away.name,
+        homeForm,
+        awayForm,
+        prediction,
+        homeStats: homeWeighted, // Passing weighted stats as team stats context
+        awayStats: awayWeighted,
+        valueAnalysis: valueAnalysis || undefined
+    });
+
     // v2.1 RISK ANALYSIS (Meta-Model)
     const riskAnalysis = analyzeRisk(
         prediction.homeWinProb, // Uses calibrated probs now
@@ -165,228 +194,229 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
     );
 
     // ... EXPERT ANALYSIS SECTION (Modified) ...
-    {/* EXPERT ANALYSIS SECTION (NEW) */ }
-    <div className="bg-gradient-to-br from-blue-900/40 to-slate-900 border border-blue-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-20 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -mr-10 -mt-10"></div>
-        <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-4">
-                <div className="bg-blue-500/20 p-2 rounded-lg">
-                    <User className="w-6 h-6 text-blue-400" />
-                </div>
-                <h3 className="text-xl font-bold text-white">Análisis del Experto</h3>
+    return (
+        <div className="space-y-8 pb-20">
+            <div className="bg-gradient-to-br from-blue-900/40 to-slate-900 border border-blue-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-20 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -mr-10 -mt-10"></div>
+                <div className="relative z-10">
+                    <div className="flex items-center gap-3 mb-4">
+                        <div className="bg-blue-500/20 p-2 rounded-lg">
+                            <User className="w-6 h-6 text-blue-400" />
+                        </div>
+                        <h3 className="text-xl font-bold text-white">Análisis del Experto</h3>
 
-                {/* Risk Flags or Value Badge */}
-                <div className="ml-auto flex gap-2">
-                    {riskAnalysis.riskLevel === 'CRITICAL' || riskAnalysis.riskLevel === 'HIGH' ? (
-                        <span className="bg-red-500/90 text-white text-[10px] font-black px-2 py-1 rounded flex items-center gap-1 shadow-lg shadow-red-500/20">
-                            <AlertCircle className="w-3 h-3" /> HIGH RISK
-                        </span>
-                    ) : valueAnalysis?.isValue ? (
-                        <span className="bg-emerald-500 text-white text-[10px] font-black px-2 py-1 rounded flex items-center gap-1 animate-bounce shadow-lg shadow-emerald-500/50">
-                            <Gem className="w-3 h-3" /> VALUE BET
-                        </span>
-                    ) : null}
-                </div>
+                        {/* Risk Flags or Value Badge */}
+                        <div className="ml-auto flex gap-2">
+                            {riskAnalysis.riskLevel === 'CRITICAL' || riskAnalysis.riskLevel === 'HIGH' ? (
+                                <span className="bg-red-500/90 text-white text-[10px] font-black px-2 py-1 rounded flex items-center gap-1 shadow-lg shadow-red-500/20">
+                                    <AlertCircle className="w-3 h-3" /> HIGH RISK
+                                </span>
+                            ) : valueAnalysis?.isValue ? (
+                                <span className="bg-emerald-500 text-white text-[10px] font-black px-2 py-1 rounded flex items-center gap-1 animate-bounce shadow-lg shadow-emerald-500/50">
+                                    <Gem className="w-3 h-3" /> VALUE BET
+                                </span>
+                            ) : null}
+                        </div>
 
-            </div>
+                    </div>
 
-            {/* Risk Warnings (Banner) */}
-            {riskAnalysis.flags.length > 0 && (
-                <div className="mb-4 bg-red-950/30 border border-red-500/20 rounded p-3">
-                    <p className="text-xs text-red-200 font-bold mb-1 uppercase tracking-wider">⚠️ Riesgos Detectados (Meta-Model)</p>
-                    <ul className="text-xs text-red-300 space-y-1">
-                        {riskAnalysis.flags.map((f, i) => (
-                            <li key={i} className="flex gap-2">
-                                <span className="font-bold">• {f.label}:</span> {f.description}
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
+                    {/* Risk Warnings (Banner) */}
+                    {riskAnalysis.flags.length > 0 && (
+                        <div className="mb-4 bg-red-950/30 border border-red-500/20 rounded p-3">
+                            <p className="text-xs text-red-200 font-bold mb-1 uppercase tracking-wider">⚠️ Riesgos Detectados (Meta-Model)</p>
+                            <ul className="text-xs text-red-300 space-y-1">
+                                {riskAnalysis.flags.map((f, i) => (
+                                    <li key={i} className="flex gap-2">
+                                        <span className="font-bold">• {f.label}:</span> {f.description}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
 
-            <div className="prose prose-invert max-w-none">
-                <p className="text-blue-100 text-lg leading-relaxed whitespace-pre-line">
-                    {expertAnalysis}
-                </p>
-            </div>
-        </div>
-    </div>
-
-
-    {/* Match Header */ }
-    <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-8 py-12 text-center relative overflow-hidden">
-        <div className="relative z-10 flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16">
-            <div className="text-right flex-1">
-                <h2 className="text-2xl md:text-4xl font-black text-white">{fixture.teams.home.name}</h2>
-                <p className="text-slate-500 mt-2">Home</p>
-            </div>
-
-            <div className="flex flex-col items-center">
-                <div className="bg-slate-800 px-4 py-1 rounded-full text-xs font-mono text-slate-400 mb-4">
-                    {format(matchDate, "d MMMM yyyy • HH:mm", { locale: es })}
-                </div>
-                <div className="text-5xl font-black text-slate-700 tracking-tighter">VS</div>
-                <div className="mt-4 text-emerald-400 font-bold text-sm tracking-widest uppercase">
-                    {fixture.league.name}
+                    <div className="prose prose-invert max-w-none">
+                        <p className="text-blue-100 text-lg leading-relaxed whitespace-pre-line">
+                            {expertAnalysis}
+                        </p>
+                    </div>
                 </div>
             </div>
 
-            <div className="text-left flex-1">
-                <h2 className="text-2xl md:text-4xl font-black text-white">{fixture.teams.away.name}</h2>
-                <p className="text-slate-500 mt-2">Away</p>
+
+            {/* Match Header */}
+            <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-8 py-12 text-center relative overflow-hidden">
+                <div className="relative z-10 flex flex-col md:flex-row items-center justify-center gap-8 md:gap-16">
+                    <div className="text-right flex-1">
+                        <h2 className="text-2xl md:text-4xl font-black text-white">{fixture.teams.home.name}</h2>
+                        <p className="text-slate-500 mt-2">Home</p>
+                    </div>
+
+                    <div className="flex flex-col items-center">
+                        <div className="bg-slate-800 px-4 py-1 rounded-full text-xs font-mono text-slate-400 mb-4">
+                            {format(matchDate, "d MMMM yyyy • HH:mm", { locale: es })}
+                        </div>
+                        <div className="text-5xl font-black text-slate-700 tracking-tighter">VS</div>
+                        <div className="mt-4 text-emerald-400 font-bold text-sm tracking-widest uppercase">
+                            {fixture.league.name}
+                        </div>
+                    </div>
+
+                    <div className="text-left flex-1">
+                        <h2 className="text-2xl md:text-4xl font-black text-white">{fixture.teams.away.name}</h2>
+                        <p className="text-slate-500 mt-2">Away</p>
+                    </div>
+                </div>
             </div>
-        </div>
-    </div>
 
-    {/* Recent Form Analysis (NEW PHASE 2) */ }
-    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-6">
-            <History className="w-5 h-5 text-orange-400" />
-            <h3 className="font-bold text-lg text-slate-200">Recent Form (Last 5)</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <TeamFormSection name={fixture.teams.home.name} stats={homeForm} />
-            <TeamFormSection name={fixture.teams.away.name} stats={awayForm} />
-        </div>
-    </div>
-
-    {/* Head to Head (Strategies #4) */ }
-    {
-        h2hMatches.length > 0 && (
+            {/* Recent Form Analysis (NEW PHASE 2) */}
             <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-                <div className="flex items-center gap-2 mb-4">
-                    <History className="w-5 h-5 text-slate-400" />
-                    <h3 className="font-bold text-lg text-slate-200">Head-to-Head (This Season)</h3>
+                <div className="flex items-center gap-2 mb-6">
+                    <History className="w-5 h-5 text-orange-400" />
+                    <h3 className="font-bold text-lg text-slate-200">Recent Form (Last 5)</h3>
                 </div>
-                <div className="space-y-2">
-                    {h2hMatches.map((match: any) => (
-                        <div key={match.fixture.id} className="flex justify-between items-center bg-slate-950 p-3 rounded text-sm">
-                            <span className="text-slate-400">{format(new Date(match.fixture.date), "dd MMM")}</span>
-                            <div className="font-bold text-white">
-                                {match.teams.home.name} <span className="text-emerald-400 mx-2">{match.goals.home} - {match.goals.away}</span> {match.teams.away.name}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <TeamFormSection name={fixture.teams.home.name} stats={homeForm} />
+                    <TeamFormSection name={fixture.teams.away.name} stats={awayForm} />
+                </div>
+            </div>
+
+            {/* Head to Head (Strategies #4) */}
+            {
+                h2hMatches.length > 0 && (
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+                        <div className="flex items-center gap-2 mb-4">
+                            <History className="w-5 h-5 text-slate-400" />
+                            <h3 className="font-bold text-lg text-slate-200">Head-to-Head (This Season)</h3>
+                        </div>
+                        <div className="space-y-2">
+                            {h2hMatches.map((match: any) => (
+                                <div key={match.fixture.id} className="flex justify-between items-center bg-slate-950 p-3 rounded text-sm">
+                                    <span className="text-slate-400">{format(new Date(match.fixture.date), "dd MMM")}</span>
+                                    <div className="font-bold text-white">
+                                        {match.teams.home.name} <span className="text-emerald-400 mx-2">{match.goals.home} - {match.goals.away}</span> {match.teams.away.name}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* AI Analysis Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Probabilities */}
+                <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+                    <div className="flex items-center gap-2 mb-6">
+                        <TrendingUp className="w-5 h-5 text-blue-500" />
+                        <h3 className="font-bold text-lg text-slate-200">Win Probability</h3>
+                        <span className="text-[10px] bg-blue-900/50 text-blue-300 border border-blue-800 px-2 py-0.5 rounded-full">
+                            Calibrated v2.1
+                        </span>
+                    </div>
+
+                    <div className="space-y-6">
+                        <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-300">{fixture.teams.home.name}</span>
+                                <span className="font-bold text-blue-400">{winProb}%</span>
+                            </div>
+                            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-blue-500" style={{ width: `${winProb}% ` }}></div>
                             </div>
                         </div>
-                    ))}
-                </div>
-            </div>
-        )
-    }
 
-    {/* AI Analysis Grid */ }
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Probabilities */}
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-            <div className="flex items-center gap-2 mb-6">
-                <TrendingUp className="w-5 h-5 text-blue-500" />
-                <h3 className="font-bold text-lg text-slate-200">Win Probability</h3>
-                <span className="text-[10px] bg-blue-900/50 text-blue-300 border border-blue-800 px-2 py-0.5 rounded-full">
-                    Calibrated v2.1
-                </span>
-            </div>
+                        <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-300">Draw</span>
+                                <span className="font-bold text-slate-400">{drawProb}%</span>
+                            </div>
+                            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-slate-600" style={{ width: `${drawProb}% ` }}></div>
+                            </div>
+                        </div>
 
-            <div className="space-y-6">
-                <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                        <span className="text-slate-300">{fixture.teams.home.name}</span>
-                        <span className="font-bold text-blue-400">{winProb}%</span>
-                    </div>
-                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-blue-500" style={{ width: `${winProb}% ` }}></div>
+                        <div className="space-y-2">
+                            <div className="flex justify-between text-sm">
+                                <span className="text-slate-300">{fixture.teams.away.name}</span>
+                                <span className="font-bold text-purple-400">{lossProb}%</span>
+                            </div>
+                            <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                                <div className="h-full bg-purple-500" style={{ width: `${lossProb}% ` }}></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                        <span className="text-slate-300">Draw</span>
-                        <span className="font-bold text-slate-400">{drawProb}%</span>
-                    </div>
-                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-slate-600" style={{ width: `${drawProb}% ` }}></div>
-                    </div>
-                </div>
+                {/* AI Insights and XG */}
+                <div className="space-y-6">
+                    <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-32 bg-blue-900/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16"></div>
 
-                <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                        <span className="text-slate-300">{fixture.teams.away.name}</span>
-                        <span className="font-bold text-purple-400">{lossProb}%</span>
-                    </div>
-                    <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-purple-500" style={{ width: `${lossProb}% ` }}></div>
-                    </div>
-                </div>
-            </div>
-        </div>
+                        <div className="flex items-center gap-2 mb-6">
+                            <AlertCircle className="w-5 h-5 text-emerald-500" />
+                            <h3 className="font-bold text-lg text-slate-200">AI Insights</h3>
+                        </div>
 
-        {/* AI Insights and XG */}
-        <div className="space-y-6">
-            <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6 relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-32 bg-blue-900/10 rounded-full blur-3xl pointer-events-none -mr-16 -mt-16"></div>
+                        <div className="space-y-4 relative z-10">
+                            <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                                <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Expected Goals (xG)</p>
+                                <div className="flex justify-between items-end">
+                                    <span className="text-2xl font-bold text-white">{prediction.expectedGoalsHome.toFixed(2)}</span>
+                                    <span className="text-slate-600 mb-1">vs</span>
+                                    <span className="text-2xl font-bold text-white">{prediction.expectedGoalsAway.toFixed(2)}</span>
+                                </div>
+                            </div>
 
-                <div className="flex items-center gap-2 mb-6">
-                    <AlertCircle className="w-5 h-5 text-emerald-500" />
-                    <h3 className="font-bold text-lg text-slate-200">AI Insights</h3>
-                </div>
+                            <div className="p-4 bg-emerald-900/20 rounded-lg border border-emerald-900/50">
+                                <p className="text-xs text-emerald-500 uppercase tracking-wider mb-2 font-bold">Recommended Bet</p>
 
-                <div className="space-y-4 relative z-10">
-                    <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
-                        <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Expected Goals (xG)</p>
-                        <div className="flex justify-between items-end">
-                            <span className="text-2xl font-bold text-white">{prediction.expectedGoalsHome.toFixed(2)}</span>
-                            <span className="text-slate-600 mb-1">vs</span>
-                            <span className="text-2xl font-bold text-white">{prediction.expectedGoalsAway.toFixed(2)}</span>
+                                {riskAnalysis.shouldBet ? (
+                                    <>
+                                        <p className="text-lg font-medium text-emerald-100">
+                                            {Number(winProb) > 50 ? `${fixture.teams.home.name} to Win` :
+                                                Number(lossProb) > 50 ? `${fixture.teams.away.name} to Win` :
+                                                    "Double Chance / Under 2.5 Goals"}
+                                        </p>
+                                        <p className="text-xs text-emerald-400/60 mt-1">Confidence: {Math.max(Number(winProb), Number(drawProb), Number(lossProb))}%</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-lg font-medium text-slate-300">
+                                            ⚠️ SKIP / NO BET
+                                        </p>
+                                        <p className="text-xs text-red-400/80 mt-1">Blocked by Meta-Model: {riskAnalysis.flags[0]?.label || 'High Risk'}</p>
+                                    </>
+                                )}
+                            </div>
                         </div>
                     </div>
 
-                    <div className="p-4 bg-emerald-900/20 rounded-lg border border-emerald-900/50">
-                        <p className="text-xs text-emerald-500 uppercase tracking-wider mb-2 font-bold">Recommended Bet</p>
-
-                        {riskAnalysis.shouldBet ? (
-                            <>
-                                <p className="text-lg font-medium text-emerald-100">
-                                    {winProb > 50 ? `${fixture.teams.home.name} to Win` :
-                                        lossProb > 50 ? `${fixture.teams.away.name} to Win` :
-                                            "Double Chance / Under 2.5 Goals"}
-                                </p>
-                                <p className="text-xs text-emerald-400/60 mt-1">Confidence: {Math.max(winProb, drawProb, lossProb)}%</p>
-                            </>
-                        ) : (
-                            <>
-                                <p className="text-lg font-medium text-slate-300">
-                                    ⚠️ SKIP / NO BET
-                                </p>
-                                <p className="text-xs text-red-400/80 mt-1">Blocked by Meta-Model: {riskAnalysis.flags[0]?.label || 'High Risk'}</p>
-                            </>
-                        )}
-                    </div>
+                    {/* Value Calculator Client Component */}
+                    <ValueBetCalculator
+                        winProb={Number(winProb)}
+                        drawProb={Number(drawProb)}
+                        lossProb={Number(lossProb)}
+                        homeName={fixture.teams.home.name}
+                        awayName={fixture.teams.away.name}
+                    />
                 </div>
             </div>
 
-            {/* Value Calculator Client Component */}
-            <ValueBetCalculator
-                winProb={winProb}
-                drawProb={drawProb}
-                lossProb={lossProb}
-                homeName={fixture.teams.home.name}
-                awayName={fixture.teams.away.name}
-            />
-        </div>
-    </div>
+            {/* PLAYER PROPS SECTION (NEW PHASE 3) */}
+            <div className="mt-8 bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+                <div className="flex items-center gap-2 mb-6">
+                    <History className="w-5 h-5 text-purple-400" />
+                    <h3 className="font-bold text-lg text-slate-200">Player Props (Anytime Goalscorer)</h3>
+                </div>
 
-    {/* PLAYER PROPS SECTION (NEW PHASE 3) */ }
-    <div className="mt-8 bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-        <div className="flex items-center gap-2 mb-6">
-            <History className="w-5 h-5 text-purple-400" />
-            <h3 className="font-bold text-lg text-slate-200">Player Props (Anytime Goalscorer)</h3>
+                <div className="p-10 text-center bg-slate-950/50 rounded-lg border border-slate-800 border-dashed">
+                    <p className="text-slate-400 mb-2">🚀 Coming Soon via API Expansion</p>
+                    <p className="text-sm text-slate-500">
+                        Player probability models and specific goalscorer markets are being integrated.
+                        Check back in the next update.
+                    </p>
+                </div>
+            </div>
         </div>
-
-        <div className="p-10 text-center bg-slate-950/50 rounded-lg border border-slate-800 border-dashed">
-            <p className="text-slate-400 mb-2">🚀 Coming Soon via API Expansion</p>
-            <p className="text-sm text-slate-500">
-                Player probability models and specific goalscorer markets are being integrated.
-                Check back in the next update.
-            </p>
-        </div>
-    </div>
-        </div >
     );
 }

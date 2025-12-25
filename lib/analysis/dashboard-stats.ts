@@ -36,7 +36,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     // (Assuming we populate it via Cron. If empty, we simulate common buckets for UI dev)
     const calibrationData = await db.select().from(modelCalibration).orderBy(modelCalibration.probabilityBucket);
 
-    const calibrationMetrics = calibrationData.map(c => ({
+    const calibrationMetrics = calibrationData.map((c: any) => ({
         bucket: c.probabilityBucket,
         expected: c.probabilityBucket,
         actual: c.actualAccuracy || 0,
@@ -49,7 +49,7 @@ export async function getDashboardMetrics(): Promise<DashboardMetrics> {
     let totalClv = 0;
     let positiveClvCount = 0;
 
-    bets.forEach(b => {
+    bets.forEach((b: any) => {
         const clv = b.clvPercentage || 0;
         totalClv += clv;
         if (clv > 0) positiveClvCount++;

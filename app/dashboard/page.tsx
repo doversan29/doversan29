@@ -204,68 +204,13 @@ export default function DashboardPage() {
                                                 {item.matchScore || '-'}
                                             </td>
                                         </tr>
-        <div className="space-y-8 pb-20">
-            <header className="mb-8">
-                <h1 className="text-3xl font-black text-white mb-2">Quant Dashboard <span className="text-blue-500 text-sm font-mono ml-2">v2.1</span></h1>
-                <p className="text-slate-400">Deep dive into model performance, risk, and edge.</p>
-            </header>
-
-            {/* 1. BANKROLL HEALTH HERO */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="md:col-span-3">
-                    <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
-                        <TrendingUp className="w-5 h-5 text-orange-500" /> Tendencias de Mercado
-                    </h3>
-                </div>
-                {/* Mock Data for Dashboard Speed - Real data is in Fixture Page */}
-                <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex items-center justify-between group hover:border-orange-500/50 transition-colors cursor-pointer">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-orange-950/30 rounded-full flex items-center justify-center text-orange-500 border border-orange-500/20">
-                            <History className="w-5 h-5" />
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
-                        <div>
-                            <p className="font-bold text-white">Liverpool</p>
-                            <p className="text-xs text-orange-400">Racha de 5 Victorias</p>
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        <span className="text-xs text-slate-500 block">Siguiente Partido</span>
-                        <span className="text-xs font-bold text-slate-300">vs Man City</span>
                     </div>
                 </div>
-
-                <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex items-center justify-between group hover:border-blue-500/50 transition-colors cursor-pointer">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-950/30 rounded-full flex items-center justify-center text-blue-500 border border-blue-500/20">
-                            <TrendingDown className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <p className="font-bold text-white">Juventus</p>
-                            <p className="text-xs text-blue-400">Under 2.5 Goals (7/8)</p>
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        <span className="text-xs text-slate-500 block">Probabilidad</span>
-                        <span className="text-xs font-bold text-emerald-400">82%</span>
-                    </div>
-                </div>
-
-                <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex items-center justify-between group hover:border-emerald-500/50 transition-colors cursor-pointer">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-emerald-950/30 rounded-full flex items-center justify-center text-emerald-500 border border-emerald-500/20">
-                            <DollarSign className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <p className="font-bold text-white">Girona</p>
-                            <p className="text-xs text-emerald-400">Value Bet (EV+ 12%)</p>
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        <span className="text-xs text-slate-500 block">Cuota Implicita</span>
-                        <span className="text-xs font-bold text-white">2.45</span>
-                    </div>
-                </div>
-            </div>
+            )}
 
             {/* Add Bet Form */}
             {showForm && (
@@ -376,5 +321,5 @@ export default function DashboardPage() {
                 </div>
             </div>
         </div>
-                                    );
+    );
 }

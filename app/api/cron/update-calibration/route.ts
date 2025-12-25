@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db/client';
 import { matchAnalysis, betOutcome } from '@/lib/db/schema';
 import { updateCalibration } from '@/lib/analysis/calibration';
-import { eq, and, isNotNull } from 'drizzle-orm';
+import { eq, and, isNotNull, sql } from 'drizzle-orm';
 import { fetchApi } from '@/lib/api-client';
 
 /**

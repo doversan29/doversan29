@@ -10,10 +10,8 @@ if (!DATABASE_URL) {
 }
 
 // Crear cliente de PostgreSQL
-// Para Supabase, la URL tiene el formato:
-// postgresql://postgres:[PASSWORD]@db.[PROJECT_REF].supabase.co:5432/postgres
 const client = postgres(DATABASE_URL, {
-    max: 10, // Conexiones máximas en el pool
+    max: 10,
     idle_timeout: 20,
     connect_timeout: 10
 });
@@ -21,19 +19,8 @@ const client = postgres(DATABASE_URL, {
 // Crear instancia de Drizzle
 export const db = drizzle(client, { schema });
 
-// Tipos exportados para uso en la app
+// Tipos exportados
 export type Database = typeof db;
-
-/**
- * Helper para manejar transacciones
- */
-export async function withTransaction<T>(
-    callback: (tx: Database) => Promise<T>
-): Promise<T> {
-    return await db.transaction(async (tx) => {
-        return await callback(tx as Database);
-    });
-}
 
 /**
  * Health check de la base de datos

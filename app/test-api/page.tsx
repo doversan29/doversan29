@@ -45,9 +45,19 @@ export default async function TestApiPage() {
             <div className="space-y-6">
                 <div className="p-4 rounded bg-slate-800 border border-slate-700">
                     <h2 className="text-blue-400 font-bold mb-2">Environment</h2>
+                    <p>Node Env: {process.env.NODE_ENV}</p>
                     <p>API Key Configured: <span className={isKeySet ? "text-green-400" : "text-red-400"}>{isKeySet ? 'YES' : 'NO'}</span></p>
                     <p>Key Prefix: {maskedKey}</p>
                     <p>Date Used: {today}</p>
+
+                    <div className="mt-4 border-t border-slate-700 pt-2">
+                        <p className="text-xs text-slate-400 mb-1">Available Keys (Safe List):</p>
+                        <div className="text-xs font-mono text-slate-500 break-all">
+                            {Object.keys(process.env).filter(k => !k.includes('SECRET') && !k.includes('KEY')).join(', ')}
+                        </div>
+                        <p className="text-xs text-slate-400 mt-2">Does 'API_FOOTBALL_KEY' exist in raw process.env?</p>
+                        <p className="text-yellow-400">{Object.keys(process.env).includes('API_FOOTBALL_KEY') ? 'YES' : 'NO'}</p>
+                    </div>
                 </div>
 
                 <div className="p-4 rounded bg-slate-800 border border-slate-700">

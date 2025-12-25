@@ -15,7 +15,14 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ l
     ? resolvedSearchParams.leagues.split(',').map(Number)
     : TOP_LEAGUES.map(l => l.id);
 
-  const fixtures = await getUpcomingFixtures(leagueIds);
+  let fixtures = [];
+
+  try {
+    fixtures = await getUpcomingFixtures(leagueIds);
+  } catch (error) {
+    console.error('Error fetching fixtures:', error);
+    // fixtures será array vacío
+  }
 
   // Group by date
   const fixturesByDate: Record<string, any[]> = {};

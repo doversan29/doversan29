@@ -12,7 +12,7 @@
  */
 
 import { db } from '../db/client';
-import { betOutcome, matchAnalysis, systemWeights } from '../db/schema';
+import { betOutcome, matchAnalysis, systemWeights, type SystemWeight } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { getSystemWeight, adjustSystemWeight } from '../db/queries';
 
@@ -221,7 +221,7 @@ export async function reviewPendingBets() {
 export async function generateAutoTuneReport() {
     const allWeights = await db.select().from(systemWeights);
 
-    const report = allWeights.map(w => ({
+    const report = allWeights.map((w: SystemWeight) => ({
         strategy: w.strategyName,
         weight: w.currentWeight,
         performance: {

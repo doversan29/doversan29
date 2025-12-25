@@ -204,44 +204,13 @@ export default function DashboardPage() {
                                                 {item.matchScore || '-'}
                                             </td>
                                         </tr>
-                                    ))}
-                                    {modelStats.history.length === 0 && (
-                                        <tr><td colSpan={5} className="px-4 py-4 text-center text-slate-600">Sin historial aún.</td></tr>
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            )}
+        <div className="space-y-8 pb-20">
+            <header className="mb-8">
+                <h1 className="text-3xl font-black text-white mb-2">Quant Dashboard <span className="text-blue-500 text-sm font-mono ml-2">v2.1</span></h1>
+                <p className="text-slate-400">Deep dive into model performance, risk, and edge.</p>
+            </header>
 
-            <hr className="border-slate-800" />
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Balance Actual</p>
-                    <p className="text-3xl font-black text-white">${stats.currentBalance.toFixed(2)}</p>
-                </div>
-                <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">ROI Total</p>
-                    <p className={`text-3xl font-black ${stats.roi >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {stats.roi.toFixed(1)}%
-                    </p>
-                </div>
-                <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Tasa de Acierto</p>
-                    <p className="text-3xl font-black text-blue-400">
-                        {stats.wins + stats.losses > 0 ? Math.round((stats.wins / (stats.wins + stats.losses)) * 100) : 0}%
-                    </p>
-                </div>
-                <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-                    <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Total Apuestas</p>
-                    <p className="text-3xl font-black text-slate-200">{stats.history.length}</p>
-                </div>
-            </div>
-
-            {/* Hot Markets / Streaks (Strategies #1) */}
+            {/* 1. BANKROLL HEALTH HERO */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-3">
                     <h3 className="font-bold text-lg text-white mb-4 flex items-center gap-2">
@@ -407,5 +376,5 @@ export default function DashboardPage() {
                 </div>
             </div>
         </div>
-    );
+                                    );
 }

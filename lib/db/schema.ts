@@ -68,6 +68,8 @@ export const betOutcome = pgTable('bet_outcome', {
   expectedGoalsActual: real('expected_goals_actual'), // xG real del partido (si disponible)
   wasLucky: boolean('was_lucky').default(false), // xG alto pero perdió
 
+  calibratedAt: timestamp('calibrated_at'), // Fecha en que se usó para entrenar el modelo (v2.1)
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
   settledAt: timestamp('settled_at')
 });

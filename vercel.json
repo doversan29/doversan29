@@ -1,8 +1,14 @@
+```json
 {
     "crons": [
         {
             "path": "/api/cron/check-value",
             "schedule": "0 * * * *"
+        },
+        {
+            "path": "/api/cron/update-calibration",
+            "schedule": "0 3 * * *"
         }
     ]
 }
+```

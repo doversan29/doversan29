@@ -115,155 +115,131 @@ export async function getUpcomingFixtures(leagueIds: number[], days = UPCOMING_D
 
     const from = today.toISOString().split('T')[0];
     const to = endDate.toISOString().split('T')[0];
+    export async function getUpcomingFixtures(leagueIds: number[]): Promise<any[]> {
+        const allFixtures: any[] = [];
+        const today = format(new Date(), 'yyyy-MM-dd');
+        const nextWeek = format(addDays(new Date(), 7), 'yyyy-MM-dd');
 
-    // Sequential requests with delay to avoid rate limiting errors
-    // API-Football has per-second limits even on paid plans sometimes
-    const allFixtures = [];
+        console.log(`[API] Fetching fixtures from ${today} to ${nextWeek} for ${leagueIds.length} leagues`);
 
-    // Create promises but run them with concurrency limit? 
-    // Actually with persistent caching, the first run will be slow (sequential), 
-    // but subsequent runs (even after restart) will be INSTANT.
+        for (const leagueId of leagueIds) {
+            try {
+                const start = Date.now();
+                // (fetchApi call was above) -> wait... logic is flawed because we await above.
 
-    for (const leagueId of leagueIds) {
+                // Simple safe logic: Always wait a bit if we assume we might hit API.
+                // Since fs cache is fast, 300ms overhead is acceptable for stability.
+                // But for initial load (cache miss), we need 1.1s.
+
+            } catch (error: any) {
+                // Suppress logging if user requested or specific known errors
+                if (error.message !== "RateLimitExceeded") {
+                    console.error(`Error fetching league ${leagueId}:`, error);
+                }
+            }
+        }
+
+        return allFixtures;
+    }
+
+    export async function getFixtureById(id: number) {
         try {
             const fixtures = await fetchApi('fixtures', {
-                league: leagueId,
-                season: 2025,
-                from,
-                to,
+                id: id,
                 timezone: 'America/Chicago'
             }, { revalidate: CACHE_DURATION_FIXTURES });
 
-            if (Array.isArray(fixtures)) {
-                allFixtures.push(...fixtures);
-            }
-
-            // We can reduce delay if we suspect it's cached?
-            // Hard to know without checking cache first in this loop.
-            // But fetchApi checks cache. If cached, it returns instantly. 
-            // So the delay is only needed if NOT cached.
-            // We keep a small delay just in case of filesystem IO speed? No need.
-            // But if it Hits API, we need delay.
-
-            // To optimize: Check if cache exists for this league manually? 
-            // No, fetchApi does it. 
-            // Optimization: If fetchApi took > 200ms, assume it hit API and wait.
-            const start = Date.now();
-            // (fetchApi call was above) -> wait... logic is flawed because we await above.
-
-            // Simple safe logic: Always wait a bit if we assume we might hit API.
-            // Since fs cache is fast, 300ms overhead is acceptable for stability.
-            // But for initial load (cache miss), we need 1.1s.
-
-        } catch (error: any) {
-            // Suppress logging if user requested or specific known errors
-            if (error.message !== "RateLimitExceeded") {
-                console.error(`Error fetching league ${leagueId}:`, error);
-            }
+            return fixtures && fixtures.length > 0 ? fixtures[0] : null;
+        } catch (error) {
+            console.error(`Error fetching fixture ${id}:`, error);
+            return null;
         }
     }
 
-    return allFixtures;
-}
+    export async function getLeagueStandings(leagueId: number, season: number = 2025) {
+        try {
+            const data = await fetchApi('standings', {
+                league: leagueId,
+                season: season
+            }, { revalidate: CACHE_DURATION_FIXTURES });
 
-export async function getFixtureById(id: number) {
-    try {
-        const fixtures = await fetchApi('fixtures', {
-            id: id,
-            timezone: 'America/Chicago'
-        }, { revalidate: CACHE_DURATION_FIXTURES });
-
-        return fixtures && fixtures.length > 0 ? fixtures[0] : null;
-    } catch (error) {
-        console.error(`Error fetching fixture ${id}:`, error);
-        return null;
-    }
-}
-
-export async function getLeagueStandings(leagueId: number, season: number = 2025) {
-    try {
-        const data = await fetchApi('standings', {
-            league: leagueId,
-            season: season
-        }, { revalidate: CACHE_DURATION_FIXTURES });
-
-        if (data && data.length > 0 && data[0].league && data[0].league.standings) {
-            // Standings are often a 2D array (groups), we usually want the first group/table
-            return data[0].league.standings[0];
+            if (data && data.length > 0 && data[0].league && data[0].league.standings) {
+                // Standings are often a 2D array (groups), we usually want the first group/table
+                return data[0].league.standings[0];
+            }
+            return [];
+        } catch (error) {
+            console.error(`Error fetching standings for league ${leagueId}:`, error);
+            return [];
         }
-        return [];
-    } catch (error) {
-        console.error(`Error fetching standings for league ${leagueId}:`, error);
-        return [];
     }
-}
 
-export async function searchTeams(query: string) {
-    if (query.length < 3) return [];
+    export async function searchTeams(query: string) {
+        if (query.length < 3) return [];
 
-    return fetchApi('teams', {
-        search: query
-    }, { revalidate: 86400 }); // Cache search results for 24h
-}
-
-export async function getLeagueHistory(leagueId: number, season: number = 2025) {
-    // Fetch ALL finished matches for the league to calculate form manually
-    // This bypasses the restricted 'last=5' endpoint
-    const cacheKey = `history_${leagueId}_${season}`;
-
-    // Check memory/fs cache heavily for this one
-    try {
-        const fixtures = await fetchApi('fixtures', {
-            league: leagueId,
-            season: season,
-            status: 'FT', // Finished matches only
-            timezone: 'America/Chicago'
-        }, { revalidate: CACHE_DURATION_FIXTURES }); // Cache for 1 hour
-
-        return fixtures || [];
-    } catch (error) {
-        console.error(`Error fetching history for league ${leagueId}:`, error);
-        return [];
+        return fetchApi('teams', {
+            search: query
+        }, { revalidate: 86400 }); // Cache search results for 24h
     }
-}
 
-export async function getTeamFixtures(teamId: number, next: number = 5) {
-    try {
-        const fixtures = await fetchApi('fixtures', {
-            team: teamId,
-            next: next,
-            timezone: 'America/Chicago'
-        }, { revalidate: CACHE_DURATION_FIXTURES });
+    export async function getLeagueHistory(leagueId: number, season: number = 2025) {
+        // Fetch ALL finished matches for the league to calculate form manually
+        // This bypasses the restricted 'last=5' endpoint
+        const cacheKey = `history_${leagueId}_${season}`;
 
-        return fixtures || [];
-    } catch (error) {
-        console.error(`Error fetching fixtures for team ${teamId}:`, error);
-        return [];
+        // Check memory/fs cache heavily for this one
+        try {
+            const fixtures = await fetchApi('fixtures', {
+                league: leagueId,
+                season: season,
+                status: 'FT', // Finished matches only
+                timezone: 'America/Chicago'
+            }, { revalidate: CACHE_DURATION_FIXTURES }); // Cache for 1 hour
+
+            return fixtures || [];
+        } catch (error) {
+            console.error(`Error fetching history for league ${leagueId}:`, error);
+            return [];
+        }
     }
-}
 
-export async function getTeamDetails(teamId: number) {
-    try {
-        const data = await fetchApi('teams', {
-            id: teamId
-        }, { revalidate: 86400 * 7 }); // Cache strictly for a week
+    export async function getTeamFixtures(teamId: number, next: number = 5) {
+        try {
+            const fixtures = await fetchApi('fixtures', {
+                team: teamId,
+                next: next,
+                timezone: 'America/Chicago'
+            }, { revalidate: CACHE_DURATION_FIXTURES });
 
-        return data && data.length > 0 ? data[0] : null;
-    } catch (error) {
-        console.error(`Error fetching team details ${teamId}:`, error);
-        return null;
+            return fixtures || [];
+        } catch (error) {
+            console.error(`Error fetching fixtures for team ${teamId}:`, error);
+            return [];
+        }
     }
-}
 
-export async function getOddsByDate(date: string) {
-    try {
-        const data = await fetchApi('odds', {
-            date: date
-        }, { revalidate: CACHE_DURATION_FIXTURES });
+    export async function getTeamDetails(teamId: number) {
+        try {
+            const data = await fetchApi('teams', {
+                id: teamId
+            }, { revalidate: 86400 * 7 }); // Cache strictly for a week
 
-        return data || [];
-    } catch (error) {
-        console.error(`Error fetching odds for date ${date}:`, error);
-        return [];
+            return data && data.length > 0 ? data[0] : null;
+        } catch (error) {
+            console.error(`Error fetching team details ${teamId}:`, error);
+            return null;
+        }
     }
-}
+
+    export async function getOddsByDate(date: string) {
+        try {
+            const data = await fetchApi('odds', {
+                date: date
+            }, { revalidate: CACHE_DURATION_FIXTURES });
+
+            return data || [];
+        } catch (error) {
+            console.error(`Error fetching odds for date ${date}:`, error);
+            return [];
+        }
+    }

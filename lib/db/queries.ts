@@ -6,6 +6,11 @@ import { eq } from 'drizzle-orm';
  * BANKROLL OPERATIONS
  */
 export async function getBankroll(userId: string = 'default') {
+    if (!db) {
+        console.error('Database client not initialized');
+        return null;
+    }
+
     const result = await db.select()
         .from(userBankroll)
         .where(eq(userBankroll.userId, userId))
@@ -15,6 +20,11 @@ export async function getBankroll(userId: string = 'default') {
 }
 
 export async function initializeBankroll(userId: string = 'default', initialAmount: number = 100) {
+    if (!db) {
+        console.error('Database client not initialized');
+        return null;
+    }
+
     const existing = await getBankroll(userId);
     if (existing) return existing;
 

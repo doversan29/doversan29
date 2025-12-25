@@ -186,6 +186,20 @@ export async function getTeamDetails(teamId: number) {
     }
 }
 
+export async function getTopScorers(leagueId: number, season: number = 2025) {
+    try {
+        const data = await fetchApi('players/topscorers', {
+            league: leagueId,
+            season: season
+        }, { revalidate: 86400 }); // Cache for 24 hours
+
+        return data || [];
+    } catch (error) {
+        console.error(`Error fetching top scorers for league ${leagueId}:`, error);
+        return [];
+    }
+}
+
 export async function getOddsByDate(date: string) {
     try {
         const data = await fetchApi('odds', {

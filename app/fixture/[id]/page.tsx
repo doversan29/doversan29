@@ -351,6 +351,22 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
                     />
                 </div>
             </div>
+
+            {/* PLAYER PROPS SECTION (NEW PHASE 3) */}
+            <div className="mt-8 bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+                <div className="flex items-center gap-2 mb-6">
+                    <History className="w-5 h-5 text-purple-400" />
+                    <h3 className="font-bold text-lg text-slate-200">Player Props (Anytime Goalscorer)</h3>
+                </div>
+
+                <div className="p-10 text-center bg-slate-950/50 rounded-lg border border-slate-800 border-dashed">
+                    <p className="text-slate-400 mb-2">🚀 Coming Soon via API Expansion</p>
+                    <p className="text-sm text-slate-500">
+                        Player probability models and specific goalscorer markets are being integrated.
+                        Check back in the next update.
+                    </p>
+                </div>
+            </div>
         </div>
     );
 }

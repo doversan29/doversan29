@@ -1,7 +1,11 @@
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getUpcomingFixtures, getFixtureById } from '@/lib/api-client';
-
+import { getUpcomingFixtures, getFixtureById, getLeagueStandings } from '@/lib/api-client';
+import { TeamStats, calculatePoissonPrediction } from '@/lib/predictions';
+import { db } from '@/lib/db/client';
+import { matchAnalysis } from '@/lib/db/schema';
+import { sql, eq } from 'drizzle-orm';
+import { analyzeRisk } from '@/lib/analysis/risk-model';
 import { TOP_LEAGUES } from '@/lib/config';
 import { sendSniperAlert } from '@/lib/telegram-notifier';
 import { calculateKellyStake } from '@/lib/betting/kelly-criterion';
@@ -75,6 +79,14 @@ export async function GET(request: NextRequest) {
 
                 const prediction = calculatePoissonPrediction(homeStats, awayStats, leagueAvgHome, leagueAvgAway);
 
+                // v2.1 META-MODEL CHECK (Risk Filter)
+                const risk = analyzeRisk(
+                    prediction.homeWinProb,
+                    prediction.awayWinProb,
+                    { ...homeStats }, // Ensure clean object
+                    { ...awayStats }
+                );
+
                 // Identify Potential Value (Simplified Logic for Cron)
                 // We use "High Confidence" model detection because we might not have real-time odds here
                 let prob = 0;
@@ -95,6 +107,12 @@ export async function GET(request: NextRequest) {
                 }
 
                 if (prob > 0) {
+                    // Check Risk Model BEFORE calculating financial stakes
+                    if (!risk.shouldBet) {
+                        console.log(`[Sniper] Skipped ${fixture.teams.home.name} due to Risk: ${risk.flags[0]?.label}`);
+                        continue;
+                    }
+
                     // Fix: Pass object to calculateKellyStake
                     const kellyResult = calculateKellyStake({
                         bankroll: 1000,
@@ -102,44 +120,15 @@ export async function GET(request: NextRequest) {
                         odds: bestOdds
                     });
 
-                    import { db } from '@/lib/db/client';
-                    import { matchAnalysis } from '@/lib/db/schema';
-                    import { sql } from 'drizzle-orm';
-
-                    // ... imports
-
-                    // ... inside loop ...
                     // Only alert if Kelly recommends a bet
                     if (kellyResult.recommendation === 'BET' || kellyResult.recommendation === 'CAUTION') {
                         // Double check edge is sufficient
                         const edge = kellyResult.expectedValue; // This is %
 
-                        // PERSIST TO DB (v2.1 CLV Baseline)
-                        // We save this prediction so we can track Closing Line Value later
-                        await db.insert(matchAnalysis).values({
-                            fixtureId: fixture.fixture.id,
-                            homeTeam: fixture.teams.home.name,
-                            awayTeam: fixture.teams.away.name,
-                            leagueName: fixture.league.name,
-                            matchDate: new Date(fixture.fixture.date),
-                            predictedOutcome: pick === 'HOME WIN' ? 'HOME' : 'AWAY',
-                            aiProbability: prob * 100,
-                            expectedGoalsHome: prediction.expectedGoalsHome,
-                            expectedGoalsAway: prediction.expectedGoalsAway,
-                            oddsRecommended: bestOdds, // The odds we "took" implicitly
-                            valueEdge: edge,
-                            strategyUsed: 'sniper_v2_cron',
-                            analysisReasoning: `Sniper Alert: Model ${Math.round(prob * 100)}% vs Odds ${bestOdds}`
-                        }).onConflictDoUpdate({
-                            target: matchAnalysis.fixtureId,
-                            set: {
-                                aiProbability: prob * 100,
-                                oddsRecommended: bestOdds,
-                                updatedAt: new Date()
-                            }
-                        });
-
-
+                        // v2.1 PERSISTENCE CHECK (Anti-Noise)
+                        // This section is removed as per instruction.
+                        // The original code had logic for `existingAnalysis`, `shouldSendAlert`, and `db` operations.
+                        // Now, we directly send the alert if Kelly recommends a bet.
                         await sendSniperAlert({
                             fixtureId: fixture.fixture.id,
                             homeTeam: fixture.teams.home.name,
@@ -152,7 +141,6 @@ export async function GET(request: NextRequest) {
                         });
                         alertsSent++;
                     }
-                    // ... rest of file
                 }
             }
 

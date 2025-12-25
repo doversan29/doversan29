@@ -5,12 +5,19 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function TestApiPage() {
-    const apiKey = process.env.API_FOOTBALL_KEY;
+    // HARDCODED KEY TEST - DO NOT KEEP IN PRODUCTION LONG TERM
+    const apiKey = "5ffa52153e4dbe8ee79e4b4bad4e532f";
     const isKeySet = !!apiKey;
     const maskedKey = apiKey ? `${apiKey.substring(0, 5)}...` : 'MISSING';
 
     const today = new Date().toISOString().split('T')[0];
     const leagueId = 39; // Premier League
+
+    // OVERRIDE FOR TEST
+    const headers = {
+        'x-rapidapi-key': apiKey,
+        'x-rapidapi-host': 'v3.football.api-sports.io'
+    };
 
     let apiResponse = null;
     let error = null;
@@ -29,7 +36,12 @@ export default async function TestApiPage() {
         // We can't access private function fetchApi if it's not exported, 
         // but I think I exported it. Let's check api-client.ts. 
         // Yes, fetchApi is exported.
-        apiResponse = await fetchApi('fixtures', params);
+        // 1. Test Raw API Call (Manual Fetch to bypass api-client env check)
+        const urlRaw = `https://v3.football.api-sports.io/fixtures?league=${leagueId}&season=2025&from=${today}&to=2025-12-31&timezone=America/Chicago`;
+        const res = await fetch(urlRaw, { headers, cache: 'no-store' });
+        if (!res.ok) throw new Error(`Status ${res.status}: ${res.statusText}`);
+        const dataRaw = await res.json();
+        apiResponse = dataRaw.response;
 
         // 2. Test Helper Function
         upcoming = await getUpcomingFixtures([39]);

@@ -11,7 +11,7 @@ export default async function ValueBetsPage() {
 
     // 1. Fetch Today's Fixtures for Top Leagues
     const leagueIds = TOP_LEAGUES.map(l => l.id);
-    const fixtures = await getUpcomingFixtures(leagueIds, 2); // Today and tomorrow
+    const fixtures = await getUpcomingFixtures(leagueIds); // Fetches next 7 days by default
 
     // 2. Fetch Odds for Today
     const today = new Date().toISOString().split('T')[0];

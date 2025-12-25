@@ -9,7 +9,7 @@ import { ArrowLeft, Ticket, TrendingUp, AlertTriangle, Sparkles } from "lucide-r
 export default async function ParlayPage() {
     // 1. Fetch upcoming matches from all Top Leagues
     const leagueIds = TOP_LEAGUES.map(l => l.id);
-    const fixtures = await getUpcomingFixtures(leagueIds, 3); // next 3 days
+    const fixtures = await getUpcomingFixtures(leagueIds); // fetches next 7 days by default
 
     // 2. Analyze matches to find "Safe Bets"
     const analyzedMatches = [];

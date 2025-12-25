@@ -1,21 +1,11 @@
 import { UPCOMING_DAYS, CACHE_DURATION_FIXTURES } from './config';
-import fs from 'fs';
-import path from 'path';
 import { format, addDays } from 'date-fns';
 
 const API_KEY = process.env.API_FOOTBALL_KEY;
 const BASE_URL = process.env.API_FOOTBALL_BASE_URL || "https://v3.football.api-sports.io";
-const CACHE_DIR = path.join(process.cwd(), 'data', 'cache');
-
-// Ensure cache directory exists
-if (!fs.existsSync(CACHE_DIR)) {
-    fs.mkdirSync(CACHE_DIR, { recursive: true });
-}
 
 if (!API_KEY) {
     console.error("API_FOOTBALL_KEY is not set in environment variables");
-} else {
-    // console.log("API Key loaded:", API_KEY.substring(0, 5) + "...");
 }
 
 type Fixture = any; // We'll refine types as we go
@@ -26,51 +16,7 @@ interface ApiOptions {
     forceRefresh?: boolean;
 }
 
-// Helper to get/set cache
-function getFromCache(key: string): any | null {
-    const filePath = path.join(CACHE_DIR, `${key}.json`);
-    if (fs.existsSync(filePath)) {
-        try {
-            const stats = fs.statSync(filePath);
-            const now = new Date().getTime();
-            const age = (now - stats.mtimeMs) / 1000;
-
-            if (age < CACHE_DURATION_FIXTURES) {
-                const content = fs.readFileSync(filePath, 'utf-8');
-                return JSON.parse(content);
-            }
-        } catch (e) {
-            console.warn(`Failed to read cache for ${key}`, e);
-        }
-    }
-    return null;
-}
-
-function saveToCache(key: string, data: any) {
-    try {
-        const filePath = path.join(CACHE_DIR, `${key}.json`);
-        fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-    } catch (e) {
-        console.warn(`Failed to save cache for ${key}`, e);
-    }
-}
-
 export async function fetchApi(endpoint: string, params: Record<string, any> = {}, options: ApiOptions = {}) {
-    // Generate cache key based on params
-    const paramString = Object.entries(params)
-        .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
-        .map(([key, val]) => `${key}-${val}`)
-        .join('_');
-    const cacheKey = `${endpoint}_${paramString}`.replace(/[^a-zA-Z0-9_-]/g, '_');
-
-    // Check FS Cache
-    if (!options.forceRefresh) {
-        const cached = getFromCache(cacheKey);
-        if (cached) {
-            return cached;
-        }
-    }
-
     const url = new URL(`${BASE_URL}/${endpoint}`);
     Object.keys(params).forEach(key => {
         if (params[key] !== undefined && params[key] !== null) {
@@ -84,7 +30,7 @@ export async function fetchApi(endpoint: string, params: Record<string, any> = {
             'x-rapidapi-host': 'v3.football.api-sports.io'
         },
         next: {
-            revalidate: options.revalidate ?? 3600, // Keep Next.js cache as backup
+            revalidate: options.revalidate ?? 3600, // Keep Next.js cache
             tags: options.tags
         }
     });
@@ -92,6 +38,7 @@ export async function fetchApi(endpoint: string, params: Record<string, any> = {
     if (!res.ok) {
         // Handle common API errors gracefully
         if (res.status === 429) {
+            console.warn("API Rate Limit Exceeded");
             throw new Error("RateLimitExceeded");
         }
         throw new Error(`API Error ${res.status}: ${res.statusText}`);
@@ -103,11 +50,6 @@ export async function fetchApi(endpoint: string, params: Record<string, any> = {
         console.error(`API Error for ${endpoint}:`, JSON.stringify(data.errors, null, 2));
         // Throwing error to be caught by caller
         throw new Error(JSON.stringify(data.errors));
-    }
-
-    // Save to FS Cache only if successful response
-    if (data.response) {
-        saveToCache(cacheKey, data.response);
     }
 
     return data.response;

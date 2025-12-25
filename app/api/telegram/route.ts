@@ -73,20 +73,50 @@ async function handleCommand(command: string, chatId: number) {
             '/stats - Estadísticas del sistema'
         );
     } else if (command === '/bankroll') {
-        const bankroll = await getBankroll();
-        if (!bankroll) {
-            await sendTelegramMessage(chatId, '❌ Bankroll no inicializado');
-            return;
-        }
+        try {
+            const bankroll = await getBankroll();
+            if (!bankroll) {
+                await sendTelegramMessage(chatId, '❌ Bankroll no inicializado. Contacta al administrador.');
+                return;
+            }
 
-        const emoji = bankroll.totalProfit >= 0 ? '📈' : '📉';
+            const emoji = bankroll.totalProfit >= 0 ? '📈' : '📉';
+            await sendTelegramMessage(
+                chatId,
+                `💰 *Tu Bankroll*\n\n` +
+                `Balance Actual: $${bankroll.currentBalance.toFixed(2)}\n` +
+                `Inversión Inicial: $${bankroll.initialInvestment.toFixed(2)}\n` +
+                `${emoji} P&L Total: $${bankroll.totalProfit.toFixed(2)}\n` +
+                `📊 ROI: ${bankroll.roi.toFixed(1)}%`
+            );
+        } catch (error) {
+            console.error('Error fetching bankroll:', error);
+            await sendTelegramMessage(chatId, '❌ Error al obtener el bankroll. Intenta de nuevo más tarde.');
+        }
+    } else if (command === '/stats') {
+        try {
+            await sendTelegramMessage(
+                chatId,
+                `📊 *Estadísticas del Sistema*\n\n` +
+                `🤖 Modelo: Monte Carlo + Poisson\n` +
+                `🎯 Umbral Value: >10% edge\n` +
+                `💰 Kelly: Fractional (1/4)\n` +
+                `🔄 Auto-Tuning: Activo\n\n` +
+                `📱 Estado: ✅ Operacional\n` +
+                `🌐 Web: doversan29.vercel.app`
+            );
+        } catch (error) {
+            console.error('Error in stats command:', error);
+            await sendTelegramMessage(chatId, '❌ Error al obtener estadísticas.');
+        }
+    } else {
         await sendTelegramMessage(
             chatId,
-            `💰 *Tu Bankroll*\n\n` +
-            `Balance Actual: $${bankroll.currentBalance.toFixed(2)}\n` +
-            `Inversión Inicial: $${bankroll.initialInvestment.toFixed(2)}\n` +
-            `${emoji} P&L Total: $${bankroll.totalProfit.toFixed(2)}\n` +
-            `📊 ROI: ${bankroll.roi.toFixed(1)}%`
+            '❓ Comando no reconocido.\n\n' +
+            'Comandos disponibles:\n' +
+            '/start - Iniciar bot\n' +
+            '/bankroll - Ver bankroll\n' +
+            '/stats - Ver estadísticas'
         );
     }
 }

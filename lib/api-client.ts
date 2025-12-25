@@ -1,7 +1,7 @@
 import { UPCOMING_DAYS, CACHE_DURATION_FIXTURES } from './config';
 import { format, addDays } from 'date-fns';
 
-const API_KEY = process.env.API_FOOTBALL_KEY;
+const API_KEY = process.env.API_FOOTBALL_KEY || "5ffa52153e4dbe8ee79e4b4bad4e532f";
 const BASE_URL = process.env.API_FOOTBALL_BASE_URL || "https://v3.football.api-sports.io";
 
 if (!API_KEY) {

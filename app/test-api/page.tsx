@@ -5,8 +5,7 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 export default async function TestApiPage() {
-    // HARDCODED KEY TEST - DO NOT KEEP IN PRODUCTION LONG TERM
-    const apiKey = "5ffa52153e4dbe8ee79e4b4bad4e532f";
+    const apiKey = process.env.API_FOOTBALL_KEY || "5ffa52153e4dbe8ee79e4b4bad4e532f"; // Fallback also here for diagnostic
     const isKeySet = !!apiKey;
     const maskedKey = apiKey ? `${apiKey.substring(0, 5)}...` : 'MISSING';
 

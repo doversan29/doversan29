@@ -8,6 +8,9 @@ interface PageProps {
   searchParams: { leagues?: string };
 }
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function Home({ searchParams }: { searchParams: Promise<{ leagues?: string }> }) {
   const resolvedSearchParams = await searchParams;
   // Parse league IDs from URL or use defaults

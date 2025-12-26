@@ -30,48 +30,70 @@ function poissonProb(k: number, lambda: number): number {
 }
 
 /**
- * POISSON ENGINE (v2.7 - REALITY INJECTION)
- * Objective: Avoid "Collapse to the Mean" (excessive draws) and inject Home Advantage.
+ * POISSON ENGINE (v3.0 - PREMIUM UPGRADE)
+ * Consume detailed statistics from /teams/statistics endpoint.
  */
 export function calculatePoissonPrediction(
-    homeStats: TeamStats,
-    awayStats: TeamStats,
+    homeRawStats: any,
+    awayRawStats: any,
+    seasonYear: number,
     leagueAvgHomeGoals: number = 1.35,
     leagueAvgAwayGoals: number = 1.15,
     isNeutral: boolean = false
 ): PredictionResult {
 
-    // 1. Adjusted Baseline Defaults
-    const safeAvgHome = (leagueAvgHomeGoals && leagueAvgHomeGoals > 0.5) ? leagueAvgHomeGoals : 1.35;
-    const safeAvgAway = (leagueAvgAwayGoals && leagueAvgAwayGoals > 0.5) ? leagueAvgAwayGoals : 1.15;
+    // 1. Mandatory Data Audit & Logging
+    console.log("📅 Using Season:", seasonYear);
 
-    // 2. Strength Normalization (Restored Sensitivity v2.7)
-    // We allow AttackStrength to breathe (clamped at 2.5 instead of being too tight)
-    const getStrength = (goals: number, games: number, leagueAvg: number) => {
-        const raw = (goals / Math.max(games, 1)) / leagueAvg;
-        if (games < 5) return (raw + 1.0) / 2; // Soft regression for small samples
-        return Math.min(raw, 2.5); // Allow high sensitivity for elite teams
-    };
-
-    const homeAttack = getStrength(homeStats.scored, homeStats.played, safeAvgHome);
-    const homeDefense = getStrength(homeStats.conceded, homeStats.played, safeAvgAway);
-
-    const awayAttack = getStrength(awayStats.scored, awayStats.played, safeAvgAway);
-    const awayDefense = getStrength(awayStats.conceded, awayStats.played, safeAvgHome);
-
-    // 3. FORCE HOME ADVANTAGE (HFA)
-    let expectedHome = homeAttack * awayDefense * safeAvgHome;
-    let expectedAway = awayAttack * homeDefense * safeAvgAway;
-
-    if (!isNeutral) {
-        expectedHome = expectedHome * 1.15; // Home teams score 15% more
+    if (!homeRawStats?.goals?.for || !awayRawStats?.goals?.for) {
+        console.error("❌ CRITICAL: Missing Premium Stats Data", { homeRawStats, awayRawStats });
+        throw new Error("Missing mandatory statistics for prediction calculation.");
     }
 
-    // Sanity Clamps (Keep them realistic but not suffocating)
+    console.log("📊 Raw Stats Home (Total/Home):", { for: homeRawStats.goals.for.total.home, against: homeRawStats.goals.against.total.home });
+    console.log("📊 Raw Stats Away (Total/Away):", { for: awayRawStats.goals.for.total.away, against: awayRawStats.goals.against.total.away });
+
+    // 2. Exact Normalization (using premium precise totals)
+    const homeMatches = Math.max(homeRawStats.fixtures.played.home, 1);
+    const awayMatches = Math.max(awayRawStats.fixtures.played.away, 1);
+
+    const getStrength = (scored: number, conceded: number, games: number, avgScored: number, avgConceded: number) => {
+        const attack = (scored / games) / avgScored;
+        const defense = (conceded / games) / avgConceded;
+        return { attack, defense };
+    };
+
+    const hStats = getStrength(
+        homeRawStats.goals.for.total.home,
+        homeRawStats.goals.against.total.home,
+        homeMatches,
+        leagueAvgHomeGoals,
+        leagueAvgAwayGoals
+    );
+
+    const aStats = getStrength(
+        awayRawStats.goals.for.total.away,
+        awayRawStats.goals.against.total.away,
+        awayMatches,
+        leagueAvgAwayGoals,
+        leagueAvgHomeGoals
+    );
+
+    // 3. FORCE HOME ADVANTAGE (HFA) Logic
+    let expectedHome = hStats.attack * aStats.defense * leagueAvgHomeGoals;
+    let expectedAway = aStats.attack * hStats.defense * leagueAvgAwayGoals;
+
+    if (!isNeutral) {
+        expectedHome *= 1.15; // Standard 15% HFA
+    }
+
+    // Sanity Clamps
     expectedHome = Math.min(Math.max(expectedHome, 0.1), 3.8);
     expectedAway = Math.min(Math.max(expectedAway, 0.1), 3.5);
 
-    // 4. Score Matrix calculation
+    console.log("🎯 CALIBRATED xG:", { home: expectedHome.toFixed(2), away: expectedAway.toFixed(2) });
+
+    // 4. Matrix calculation
     const scoreMatrix: number[][] = [];
     let homeWinProb = 0;
     let rawDrawProb = 0;

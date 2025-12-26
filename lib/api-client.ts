@@ -92,6 +92,57 @@ export async function getMarketOdds(fixtureId: number, bookmakerId: number = 1) 
     }
 }
 
+/**
+ * Discover the current active season for a league (Premium API-Football)
+ */
+export async function getCurrentSeason(leagueId: number): Promise<number> {
+    try {
+        const data = await fetchApi('leagues', { id: leagueId });
+
+        if (data && data.length > 0 && data[0].seasons) {
+            const seasons = data[0].seasons;
+            // Find the one marked as 'current'
+            const currentSeason = seasons.find((s: any) => s.current === true);
+
+            if (currentSeason) {
+                // Verify if it has statistics coverage
+                const hasStats = currentSeason.coverage?.fixtures?.statistics_fixtures || false;
+                if (!hasStats) {
+                    console.warn(`[SEASON] Current season ${currentSeason.year} has no stats coverage yet. Falling back to previous.`);
+                    return currentSeason.year - 1;
+                }
+                return currentSeason.year;
+            }
+        }
+        return new Date().getFullYear(); // Absolute fallback
+    } catch (error) {
+        console.error(`Error discovering season for league ${leagueId}:`, error);
+        return new Date().getFullYear();
+    }
+}
+
+/**
+ * Fetch detailed team statistics (Premium /teams/statistics endpoint)
+ */
+export async function getTeamStatsPremium(teamId: number, leagueId: number, season: number) {
+    try {
+        const data = await fetchApi('teams/statistics', {
+            league: leagueId,
+            season: season,
+            team: teamId
+        }, { revalidate: CACHE_DURATION_FIXTURES });
+
+        if (!data) {
+            throw new Error(`No statistics found for Team: ${teamId}, League: ${leagueId}, Season: ${season}`);
+        }
+
+        return data; // Returns the full object with goals.for.total.home, etc.
+    } catch (error) {
+        console.error(`Error fetching premium stats for team ${teamId}:`, error);
+        throw error; // Rethrow to let caller handle critical data absence
+    }
+}
+
 export async function getUpcomingFixtures(leagueIds: number[]): Promise<any[]> {
     const allFixtures: any[] = [];
     const today = format(new Date(), 'yyyy-MM-dd');

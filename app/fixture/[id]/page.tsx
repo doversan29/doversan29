@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { es } from 'date-fns/locale';
 import Link from "next/link";
 import { ArrowLeft, TrendingUp, AlertCircle, Calculator, History, Activity, Flame, Snowflake, Clock, User } from "lucide-react";
-import { getFixtureById, getLeagueStandings, getLeagueHistory, getMarketOdds } from "@/lib/api-client";
+import { getFixtureById, getLeagueStandings, getLeagueHistory, getMarketOdds, getCurrentSeason, getTeamStatsPremium } from "@/lib/api-client";
 import { getMatchOdds } from "@/lib/odds";
 import ValueBetCalculator from "@/components/ValueBetCalculator";
 import BettingStrategyCard from "@/components/BettingStrategyCard";
@@ -91,71 +91,63 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
 
     const matchDate = new Date(fixture.fixture.date);
 
-    // Fetch Data Parallelisation
-    const [standings, history, realOdds] = await Promise.all([
-        getLeagueStandings(fixture.league.id, fixture.league.season),
-        getLeagueHistory(fixture.league.id, fixture.league.season),
-        getMarketOdds(fixture.fixture.id, 1) // Bet365 ID 1
+    // Discovery Season (v3.0 Premium Discovery)
+    const seasonYear = await getCurrentSeason(fixture.league.id);
+
+    // Fetch Premium Stats Parallelisation
+    const [standings, history, realOdds, homePremiumStats, awayPremiumStats] = await Promise.all([
+        getLeagueStandings(fixture.league.id, seasonYear),
+        getLeagueHistory(fixture.league.id, seasonYear),
+        getMarketOdds(fixture.fixture.id, 1), // Bet365 ID 1
+        getTeamStatsPremium(fixture.teams.home.id, fixture.league.id, seasonYear),
+        getTeamStatsPremium(fixture.teams.away.id, fixture.league.id, seasonYear)
     ]);
 
-    // Calculate Advanced Form
-    const homeForm = calculateTeamForm(fixture.teams.home.id, history);
-    // ... (existing code) ...
-
-    const awayForm = calculateTeamForm(fixture.teams.away.id, history);
-
-    // H2H Logic (Filter history for matches between distinct home/away pair)
-    // Note: In a full app we'd fetch ALL history across seasons, but here we check current season encounters
-    const h2hMatches = history.filter((m: any) =>
+    // H2H Logic (v3.0)
+    const h2hMatches = (history || []).filter((m: any) =>
         (m.teams.home.id === fixture.teams.home.id && m.teams.away.id === fixture.teams.away.id) ||
         (m.teams.home.id === fixture.teams.away.id && m.teams.away.id === fixture.teams.home.id)
     ).slice(0, 3);
 
-    // Standings Stats Fallback (Venue Specific Model)
-    const getStats = (teamId: number, venue: 'home' | 'away') => {
-        const teamData = standings.find((s: any) => s.team.id === teamId);
-        if (!teamData) {
-            return { played: 5, scored: 5, conceded: 5 };
-        }
-        // Use strict HOME stats for home team, AWAY stats for away team
-        const stats = teamData[venue];
-        return {
-            played: stats.played,
-            scored: stats.goals.for,
-            conceded: stats.goals.against
-        };
+    // Map Premium Stats to Legacy TeamStats for analysis compatibility
+    const homeStats = {
+        played: homePremiumStats.fixtures.played.home || 1,
+        scored: homePremiumStats.goals.for.total.home || 0,
+        conceded: homePremiumStats.goals.against.total.home || 0
+    };
+    const awayStats = {
+        played: awayPremiumStats.fixtures.played.away || 1,
+        scored: awayPremiumStats.goals.for.total.away || 0,
+        conceded: awayPremiumStats.goals.against.total.away || 0
     };
 
-    const homeStats = getStats(fixture.teams.home.id, 'home');
-    const awayStats = getStats(fixture.teams.away.id, 'away');
+    // Calculate Advanced Form (for expert analysis narrative)
+    const homeForm = calculateTeamForm(fixture.teams.home.id, history);
+    const awayForm = calculateTeamForm(fixture.teams.away.id, history);
 
-    // Calculate League Averages 
-    let leagueAvgHome = 1.5;
-    let leagueAvgAway = 1.2;
-    if (standings.length > 0) {
+    // Calculate League Averages from Standings
+    let leagueAvgHome = 1.35;
+    let leagueAvgAway = 1.15;
+    if (standings && standings.length > 0) {
         const totalGoals = standings.reduce((acc: number, curr: any) => acc + curr.all.goals.for, 0);
         const totalMatches = standings.reduce((acc: number, curr: any) => acc + curr.all.played, 0);
         if (totalMatches > 0) {
             const avgGoalsPerMatch = totalGoals / totalMatches;
-            leagueAvgHome = avgGoalsPerMatch * 0.55;
-            leagueAvgAway = avgGoalsPerMatch * 0.45;
+            leagueAvgHome = avgGoalsPerMatch * 0.52;
+            leagueAvgAway = avgGoalsPerMatch * 0.48;
         }
     }
 
-
-    // --- NEW: Weighted Prediction Logic ---
-    // Convert 5-game form to TeamStats format for the weight function
-    const homeRecentStats = { played: 1, scored: homeForm.avgGoalsScored, conceded: homeForm.avgGoalsConceded };
-    const awayRecentStats = { played: 1, scored: awayForm.avgGoalsScored, conceded: awayForm.avgGoalsConceded };
-
-    // Apply 60% Season / 40% Form weighting (v2.6)
-    const homeWeighted = calculateWeightedStats(homeStats, homeRecentStats, 0.4);
-    const awayWeighted = calculateWeightedStats(awayStats, awayRecentStats, 0.4);
-
-
-    // Poisson Prediction (v2.7 Reality Injection)
+    // Poisson Prediction (v3.0 Premium)
     const isNeutral = (fixture.fixture as any).venue?.neutral || false;
-    const prediction = calculatePoissonPrediction(homeWeighted, awayWeighted, leagueAvgHome, leagueAvgAway, isNeutral);
+    const prediction = calculatePoissonPrediction(
+        homePremiumStats,
+        awayPremiumStats,
+        seasonYear,
+        leagueAvgHome,
+        leagueAvgAway,
+        isNeutral
+    );
 
     // Calibrate Probabilities
     if (prediction) {
@@ -182,8 +174,8 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
         homeForm,
         awayForm,
         prediction,
-        homeStats: homeWeighted, // Passing weighted stats as team stats context
-        awayStats: awayWeighted,
+        homeStats: homePremiumStats, // Passing premium stats
+        awayStats: awayPremiumStats,
         valueAnalysis: valueAnalysis || undefined
     });
 
@@ -191,8 +183,8 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
     const riskAnalysis = analyzeRisk(
         prediction.homeWinProb, // Uses calibrated probs now
         prediction.awayWinProb,
-        homeWeighted, // Stats normalized
-        awayWeighted
+        homePremiumStats,
+        awayPremiumStats
     );
 
     const recommendedBet = getRecommendedBet(prediction, fixture.teams.home.name, fixture.teams.away.name, realOdds || undefined);

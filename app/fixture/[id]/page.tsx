@@ -8,6 +8,7 @@ import { ArrowLeft, TrendingUp, AlertCircle, Calculator, History, Activity, Flam
 import { getFixtureById, getLeagueStandings, getLeagueHistory } from "@/lib/api-client";
 import { getMatchOdds } from "@/lib/odds";
 import ValueBetCalculator from "@/components/ValueBetCalculator";
+import BettingStrategyCard from "@/components/BettingStrategyCard";
 import { calculateTeamForm, FormStats } from "@/lib/analytics";
 import { generateExpertAnalysis } from "@/lib/analysis-text";
 import { calculateValue } from "@/lib/value-bet";
@@ -369,35 +370,33 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
                                 </div>
                             </div>
 
-                            <div className="p-4 bg-emerald-900/20 rounded-lg border border-emerald-900/50">
-                                <p className="text-xs text-emerald-500 uppercase tracking-wider mb-2 font-bold">Recommended Bet</p>
+                        </div>
 
-                                {riskAnalysis.shouldBet ? (
-                                    <>
-                                        <p className="text-lg font-medium text-emerald-100">
-                                            {recommendedBet}
-                                        </p>
-                                        <p className="text-xs text-emerald-400/60 mt-1">Confidence: {Math.max(Number(winProb), Number(drawProb), Number(lossProb))}%</p>
-                                    </>
-                                ) : (
-                                    <>
-                                        <p className="text-lg font-medium text-slate-300">
-                                            ⚠️ SKIP / NO BET
-                                        </p>
-                                        <p className="text-xs text-red-400/80 mt-1">Blocked by Meta-Model: {riskAnalysis.flags[0]?.label || 'High Risk'}</p>
-                                    </>
-                                )}
-                            </div>
-
-                            {/* Value Calculator Client Component */}
-                            <ValueBetCalculator
-                                winProb={Number(winProb)}
-                                drawProb={Number(drawProb)}
-                                lossProb={Number(lossProb)}
+                        {/* NEW: Interactive Strategy Card */}
+                        <div className="mt-6">
+                            <BettingStrategyCard
+                                fixtureId={fixture.fixture.id}
                                 homeName={fixture.teams.home.name}
                                 awayName={fixture.teams.away.name}
+                                prediction={{
+                                    homeProb: prediction.homeWinProb,
+                                    awayProb: prediction.awayWinProb,
+                                    expectedGoals: prediction.expectedGoalsHome + prediction.expectedGoalsAway
+                                }}
+                                recommendedBet={recommendedBet}
                             />
                         </div>
+
+                        {/* Value Calculator Client Component */}
+
+                        {/* Value Calculator Client Component */}
+                        <ValueBetCalculator
+                            winProb={Number(winProb)}
+                            drawProb={Number(drawProb)}
+                            lossProb={Number(lossProb)}
+                            homeName={fixture.teams.home.name}
+                            awayName={fixture.teams.away.name}
+                        />
                     </div>
                 </div>
             </div>

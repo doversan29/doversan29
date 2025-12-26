@@ -70,6 +70,10 @@ export const betOutcome = pgTable('bet_outcome', {
 
   calibratedAt: timestamp('calibrated_at'), // Fecha en que se usó para entrenar el modelo (v2.1)
 
+  // v3.0 Interactive Strategy
+  betType: text('bet_type'), // 'MONEYLINE', 'GOALS', 'CORNERS', 'PARLAY'
+  selectedOdds: real('selected_odds'), // La cuota exacta confirmada por el usuario
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
   settledAt: timestamp('settled_at')
 });

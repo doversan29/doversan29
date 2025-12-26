@@ -23,7 +23,7 @@ interface StrategyProps {
     realOdds?: { home: number, draw: number, away: number };
 }
 
-export default function BettingStrategyCard({ fixtureId, homeName, awayName, prediction, recommendedBet }: StrategyProps) {
+export default function BettingStrategyCard({ fixtureId, homeName, awayName, prediction, recommendedBet, realOdds }: StrategyProps) {
     const [saved, setSaved] = useState(false);
     const [loading, setLoading] = useState(false);
 

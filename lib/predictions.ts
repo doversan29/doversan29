@@ -30,8 +30,9 @@ function poissonProb(k: number, lambda: number): number {
 }
 
 /**
- * POISSON ENGINE (v3.1 - DYNAMIC COMPATIBILITY)
- * Objective: Handle both Premium API stats (/teams/statistics) and Legacy stats (Standings).
+ * POISSON ENGINE (v3.3 - CRITICAL MATH FIX)
+ * Objective: Use AVERAGES instead of TOTALS to avoid Over 2.5 bias.
+ * Handles Premium API stats (/teams/statistics) and Legacy stats (Standings).
  */
 export function calculatePoissonPrediction(
     homeData: any,
@@ -42,80 +43,79 @@ export function calculatePoissonPrediction(
     seasonYear: number = new Date().getFullYear()
 ): PredictionResult {
 
-    // 1. DATA DETECTION & NORMALIZATION
-    // Detect if we are receiving the rich Premium object or the simple Legacy object
-    const isPremium = (data: any) => data?.goals?.for?.total !== undefined;
+    // 1. DATA DETECTION & PARSING
+    const isPremium = (data: any) => data?.goals?.for?.average !== undefined;
 
-    let homeS: TeamStats;
-    let awayS: TeamStats;
+    let homeAttack: number;
+    let homeDefense: number;
+    let awayAttack: number;
+    let awayDefense: number;
 
     if (isPremium(homeData)) {
-        // Premium Path: Uses venue-specific totals (home for home, away for away)
-        homeS = {
-            played: Math.max(homeData.fixtures.played.home, 1),
-            scored: homeData.goals.for.total.home,
-            conceded: homeData.goals.against.total.home
-        };
+        // v3.3: API-Football Premium returns averages as strings (e.g. "1.5")
+        // We MUST use Averages, not Totals.
+        const rawHomeScored = homeData.goals.for.average.home;
+        const rawHomeConceded = homeData.goals.against.average.home;
+
+        homeAttack = parseFloat(rawHomeScored) || 1.25;
+        homeDefense = parseFloat(rawHomeConceded) || 1.25;
+
+        console.log("STATS DEBUG (HOME):", {
+            raw_avg_scored: rawHomeScored,
+            parsed: homeAttack,
+            raw_avg_conceded: rawHomeConceded,
+            parsed_def: homeDefense
+        });
     } else {
-        // Legacy Path: Fallback for list views (Parlay, Value Bets)
-        homeS = {
-            played: Math.max(homeData.played, 1),
-            scored: homeData.scored,
-            conceded: homeData.conceded
-        };
+        // Legacy path (Standings-based)
+        homeAttack = homeData.scored / Math.max(homeData.played, 1);
+        homeDefense = homeData.conceded / Math.max(homeData.played, 1);
     }
 
     if (isPremium(awayData)) {
-        awayS = {
-            played: Math.max(awayData.fixtures.played.away, 1),
-            scored: awayData.goals.for.total.away,
-            conceded: awayData.goals.against.total.away
-        };
+        const rawAwayScored = awayData.goals.for.average.away;
+        const rawAwayConceded = awayData.goals.against.average.away;
+
+        awayAttack = parseFloat(rawAwayScored) || 1.25;
+        awayDefense = parseFloat(rawAwayConceded) || 1.25;
+
+        console.log("STATS DEBUG (AWAY):", {
+            raw_avg_scored: rawAwayScored,
+            parsed: awayAttack,
+            raw_avg_conceded: rawAwayConceded,
+            parsed_def: awayDefense
+        });
     } else {
-        awayS = {
-            played: Math.max(awayData.played, 1),
-            scored: awayData.scored,
-            conceded: awayData.conceded
-        };
+        awayAttack = awayData.scored / Math.max(awayData.played, 1);
+        awayDefense = awayData.conceded / Math.max(awayData.played, 1);
     }
 
-    // AUDIT LOG (v3.1)
-    if (isPremium(homeData)) {
-        console.log(`[PREMIUM] Match analysis for season ${seasonYear}`);
-    } else {
-        console.log(`[LEGACY] Match analysis (Standings-based)`);
-    }
+    // 2. STRENGTH NORMALIZATION relative to League
+    const hStrAttack = homeAttack / leagueAvgHomeGoals;
+    const hStrDefense = homeDefense / leagueAvgAwayGoals;
+    const aStrAttack = awayAttack / leagueAvgAwayGoals;
+    const aStrDefense = awayDefense / leagueAvgHomeGoals;
 
-    // 2. Strength Calculation (Restored Sensitivity)
-    const getStrength = (scored: number, conceded: number, games: number, avgScored: number, avgConceded: number) => {
-        const attack = (scored / games) / avgScored;
-        const defense = (conceded / games) / avgConceded;
-        return {
-            attack: Math.min(attack, 2.5),
-            defense: Math.min(defense, 2.5)
-        };
-    };
+    // 3. PROJECTED xG WITH HFA & SAFETY CAP
+    let expectedHome = hStrAttack * aStrDefense * leagueAvgHomeGoals;
+    let expectedAway = aStrAttack * hStrDefense * leagueAvgAwayGoals;
 
-    const hStrength = getStrength(homeS.scored, homeS.conceded, homeS.played, leagueAvgHomeGoals, leagueAvgAwayGoals);
-    const aStrength = getStrength(awayS.scored, awayS.conceded, awayS.played, leagueAvgAwayGoals, leagueAvgHomeGoals);
-
-    // 3. FORCE HOME ADVANTAGE (HFA)
-    let expectedHome = hStrength.attack * aStrength.defense * leagueAvgHomeGoals;
-    let expectedAway = aStrength.attack * hStrength.defense * leagueAvgAwayGoals;
-
+    // Force Home Advantage
     if (!isNeutral) {
-        expectedHome *= 1.15; // Home teams score 15% more
+        expectedHome *= 1.15;
     }
 
-    // Sanity Clamps
-    expectedHome = Math.min(Math.max(expectedHome, 0.1), 3.8);
-    expectedAway = Math.min(Math.max(expectedAway, 0.1), 3.5);
+    // MANDATORY SAFETY CAP (v3.3) - Prevent "Collapse to Overs"
+    expectedHome = Math.min(Math.max(expectedHome, 0.1), 3.50);
+    expectedAway = Math.min(Math.max(expectedAway, 0.1), 3.50);
+
+    console.log("🎯 CALIBRATED xG (v3.3):", { home: expectedHome.toFixed(2), away: expectedAway.toFixed(2) });
 
     // 4. Matrix & Winning Probabilities
     const scoreMatrix: number[][] = [];
-    let homeWinProb = 0;
-    let rawDrawProb = 0;
-    let awayWinProb = 0;
+    let hWin = 0;
+    let draw = 0;
+    let aWin = 0;
 
     for (let h = 0; h <= 5; h++) {
         const row: number[] = [];
@@ -126,38 +126,27 @@ export function calculatePoissonPrediction(
             const probScore = probH * probA;
             row.push(probScore);
 
-            if (h > a) homeWinProb += probScore;
-            else if (h === a) rawDrawProb += probScore;
-            else awayWinProb += probScore;
+            if (h > a) hWin += probScore;
+            else if (h === a) draw += probScore;
+            else aWin += probScore;
         }
         scoreMatrix.push(row);
     }
 
     // 5. DRAW DAMPENER (v2.7)
-    let finalDraw = rawDrawProb;
-    let finalHome = homeWinProb;
-    let finalAway = awayWinProb;
-
-    if (finalDraw > 0.35) {
-        const excess = finalDraw - 0.35;
-        finalDraw = 0.35;
-        finalHome += excess / 2;
-        finalAway += excess / 2;
+    if (draw > 0.35) {
+        const excess = draw - 0.35;
+        draw = 0.35;
+        hWin += excess / 2;
+        aWin += excess / 2;
     }
 
-    const total = finalHome + finalDraw + finalAway;
-
-    // FINAL LOG (Combined Fix)
-    console.log("PROB FIX:", {
-        H_xG: expectedHome.toFixed(2),
-        A_xG: expectedAway.toFixed(2),
-        AdjustedDraw: finalDraw.toFixed(2)
-    });
+    const total = hWin + draw + aWin;
 
     return {
-        homeWinProb: finalHome / total,
-        drawProb: finalDraw / total,
-        awayWinProb: finalAway / total,
+        homeWinProb: hWin / total,
+        drawProb: draw / total,
+        awayWinProb: aWin / total,
         scoreMatrix,
         expectedGoalsHome: expectedHome,
         expectedGoalsAway: expectedAway
@@ -172,22 +161,20 @@ export function detectMarketTrap(
     marketOdds: number
 ): { isTrap: boolean; reasoning: string } {
     if (!marketOdds || marketOdds <= 1) return { isTrap: false, reasoning: "" };
-
     const fairOdds = 1 / modelProb;
     const deviation = marketOdds / fairOdds;
 
     if (deviation > 1.35) {
         return {
             isTrap: true,
-            reasoning: `Market odds (${marketOdds}) are ${((deviation - 1) * 100).toFixed(0)}% higher than fair odds (${fairOdds.toFixed(2)}). Possible missing players.`
+            reasoning: `Market odds (${marketOdds}) are ${((deviation - 1) * 100).toFixed(0)}% higher than fair odds (${fairOdds.toFixed(2)}).`
         };
     }
-
     return { isTrap: false, reasoning: "" };
 }
 
 /**
- * WEIGHTED STATS
+ * WEIGHTED STATS (Legacy support)
  */
 export function calculateWeightedStats(seasonStats: TeamStats, recentStats: TeamStats, recentWeight: number = 0.4): TeamStats {
     const seasonWeight = 1 - recentWeight;

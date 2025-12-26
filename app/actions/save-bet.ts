@@ -43,8 +43,9 @@ export async function saveUserSelection(data: BetSelection) {
         if (!analysis.length) {
             console.log('Analysis not found, creating record on-the-fly for fixture', data.fixtureId);
 
-            const matchDateValue: Date = data.matchDate && typeof data.matchDate === 'string'
-                ? new Date(data.matchDate)
+            // Safely convert matchDate to Date, handling undefined case
+            const matchDateValue: Date = data.matchDate 
+                ? new Date(data.matchDate as string)
                 : new Date();
 
             const newAnalysis: NewMatchAnalysis = {

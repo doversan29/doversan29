@@ -148,9 +148,9 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
     const homeRecentStats = { played: 1, scored: homeForm.avgGoalsScored, conceded: homeForm.avgGoalsConceded };
     const awayRecentStats = { played: 1, scored: awayForm.avgGoalsScored, conceded: awayForm.avgGoalsConceded };
 
-    // Apply 70% Season / 30% Form weighting
-    const homeWeighted = calculateWeightedStats(homeStats, homeRecentStats, 0.3);
-    const awayWeighted = calculateWeightedStats(awayStats, awayRecentStats, 0.3);
+    // Apply 60% Season / 40% Form weighting (v2.6)
+    const homeWeighted = calculateWeightedStats(homeStats, homeRecentStats, 0.4);
+    const awayWeighted = calculateWeightedStats(awayStats, awayRecentStats, 0.4);
 
 
     // Poisson Prediction

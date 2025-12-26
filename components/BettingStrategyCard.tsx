@@ -13,20 +13,26 @@ interface StrategyProps {
         homeProb: number;
         awayProb: number;
         expectedGoals: number;
+        cornerProb?: {
+            over85: number;
+            over95: number;
+            over105: number;
+        };
     };
     recommendedBet: string;
+    realOdds?: { home: number, draw: number, away: number };
 }
 
 export default function BettingStrategyCard({ fixtureId, homeName, awayName, prediction, recommendedBet }: StrategyProps) {
     const [saved, setSaved] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    // Default Odds (Simulated)
+    // Live Odds from API (v3.5)
     const [odds, setOdds] = useState({
-        winner: 1.75,
+        winner: realOdds?.home || 1.75,
         goals: 1.85,
         corners: 1.50,
-        parlay: 4.85 // 1.75 * 1.85 * 1.50 approx
+        parlay: (realOdds?.home || 1.75) * 1.85 * 1.50
     });
 
     const [selected, setSelected] = useState({

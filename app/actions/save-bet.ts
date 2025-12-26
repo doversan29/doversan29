@@ -43,12 +43,16 @@ export async function saveUserSelection(data: BetSelection) {
         if (!analysis.length) {
             console.log('Analysis not found, creating record on-the-fly for fixture', data.fixtureId);
 
+            const matchDateValue: Date = data.matchDate && typeof data.matchDate === 'string'
+                ? new Date(data.matchDate)
+                : new Date();
+
             const newAnalysis: NewMatchAnalysis = {
                 fixtureId: data.fixtureId,
                 homeTeam: data.homeTeam,
                 awayTeam: data.awayTeam,
                 leagueName: data.leagueName || 'Unknown League',
-                matchDate: data.matchDate && typeof data.matchDate === 'string' ? new Date(data.matchDate) : new Date(),
+                matchDate: matchDateValue,
                 predictedOutcome: data.prediction?.outcome || 'UNKNOWN',
                 aiProbability: data.prediction?.probability || 0,
                 expectedGoalsHome: data.prediction?.xgHome || 0,

@@ -34,9 +34,9 @@ export function analyzeRisk(
     const flags: RiskFlag[] = [];
 
     // 1. COIN FLIP DETECTOR
-    // If the difference between Home and Away prob is < 10%, it's too close to call reliably.
+    // If the difference between Home and Away prob is < 15%, it's too close to call reliably.
     const probDiff = Math.abs(homeProb - awayProb);
-    if (probDiff < 0.10) {
+    if (probDiff < 0.15) {
         flags.push({
             code: 'COIN_FLIP',
             label: 'Coin Flip Match',
@@ -63,13 +63,13 @@ export function analyzeRisk(
     }
 
     // 3. LOW CONFIDENCE BLOCKER
-    // If the highest probability is < 38% (typical Draw zone), we shouldn't force a Winner pick.
+    // If the highest probability is < 55%, we shouldn't force a Winner pick.
     const maxProb = Math.max(homeProb, awayProb, 1 - (homeProb + awayProb)); // 1-sum is Draw
-    if (maxProb < 0.40) {
+    if (maxProb < 0.55) {
         flags.push({
             code: 'LOW_CONFIDENCE',
             label: 'Low Model Confidence',
-            description: 'No outcome exceeds 40% probability. Value is thin.',
+            description: 'No outcome exceeds 55% probability. Value is thin.',
             severity: 'BLOCKER'
         });
     }

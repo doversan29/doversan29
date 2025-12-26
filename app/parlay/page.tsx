@@ -69,17 +69,17 @@ export default async function ParlayPage() {
             let type = '';
             let odds = 0; // Mock odds estimation based on probability
 
-            if (pred.homeWinProb > 0.60) {
+            if (pred.homeWinProb > 0.65) {
                 safePick = `${fixture.teams.home.name} to Win`;
                 confidence = pred.homeWinProb;
                 type = 'HOME_WIN';
                 odds = 1 / pred.homeWinProb;
-            } else if (pred.awayWinProb > 0.60) {
+            } else if (pred.awayWinProb > 0.65) {
                 safePick = `${fixture.teams.away.name} to Win`;
                 confidence = pred.awayWinProb;
                 type = 'AWAY_WIN';
                 odds = 1 / pred.awayWinProb;
-            } else if (pred.homeWinProb + pred.drawProb > 0.80) {
+            } else if (pred.homeWinProb + pred.drawProb > 0.85) {
                 safePick = `${fixture.teams.home.name} Double Chance`;
                 confidence = pred.homeWinProb + pred.drawProb;
                 type = 'HOME_DC';
@@ -123,7 +123,7 @@ export default async function ParlayPage() {
                 <div className="p-10 border border-slate-800 rounded-xl bg-slate-900/50 text-center">
                     <AlertTriangle className="w-10 h-10 text-yellow-500 mx-auto mb-4" />
                     <h3 className="text-white font-bold text-xl">Not enough safe matches</h3>
-                    <p className="text-slate-500 mt-2">The AI couldn&apos;t find 3 matches with &gt;60% confidence today. Try again closer to the weekend.</p>
+                    <p className="text-slate-500 mt-2">The AI couldn&apos;t find 3 matches with &gt;65% confidence today. Try again closer to the weekend.</p>
                 </div>
             ) : (
                 <div className="grid gap-8 md:grid-cols-3 relative">

@@ -98,7 +98,7 @@ async function handleCommand(command: string, chatId: number) {
             await sendTelegramMessage(
                 chatId,
                 `📊 *Estadísticas del Sistema*\n\n` +
-                `🤖 Modelo: Monte Carlo + Poisson\n` +
+                `🤖 Modelo: Poisson v3.6 + Reality Dampener\n` +
                 `🎯 Umbral Value: >10% edge\n` +
                 `💰 Kelly: Fractional (1/4)\n` +
                 `🔄 Auto-Tuning: Activo\n\n` +

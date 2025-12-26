@@ -87,48 +87,44 @@ export async function GET(request: NextRequest) {
                     { ...awayStats }
                 );
 
-                // Identify Potential Value (Simplified Logic for Cron)
-                // We use "High Confidence" model detection because we might not have real-time odds here
-                let prob = 0;
-                let pick = '';
-                let bestOdds = 0; // Hypothetical odds if we don't have them
+                const recommendation = getRecommendedBet(prediction, fixture.teams.home.name, fixture.teams.away.name);
 
-                if (prediction.homeWinProb > 0.65) {
-                    prob = prediction.homeWinProb;
-                    pick = 'HOME WIN';
-                    // Conservatively estimate market odds for a 65% fav are around 1.40-1.50
-                    // If we model 65% (1.53 fair), and we find edges...
-                    // Let's assume we alert if model is very confident (>65%)
-                    bestOdds = 1.60; // Mock odds to trigger calculation
-                } else if (prediction.awayWinProb > 0.65) {
-                    prob = prediction.awayWinProb;
-                    pick = 'AWAY WIN';
+                // Identify Potential Value (Using v3.6 Recommendation Engine)
+                let prob = 0;
+                let pick = recommendation;
+                let bestOdds = 0;
+
+                if (recommendation.includes('to Win')) {
+                    prob = recommendation.includes(fixture.teams.home.name) ? prediction.homeWinProb : prediction.awayWinProb;
                     bestOdds = 1.60;
+                } else if (recommendation === 'Over 2.5 Goals') {
+                    prob = 1 - (
+                        (poissonProb(0, prediction.expectedGoalsHome) * poissonProb(0, prediction.expectedGoalsAway)) +
+                        (poissonProb(0, prediction.expectedGoalsHome) * poissonProb(1, prediction.expectedGoalsAway)) +
+                        (poissonProb(1, prediction.expectedGoalsHome) * poissonProb(0, prediction.expectedGoalsAway)) +
+                        (poissonProb(1, prediction.expectedGoalsHome) * poissonProb(1, prediction.expectedGoalsAway)) +
+                        (poissonProb(2, prediction.expectedGoalsHome) * poissonProb(0, prediction.expectedGoalsAway)) +
+                        (poissonProb(0, prediction.expectedGoalsHome) * poissonProb(2, prediction.expectedGoalsAway))
+                    );
+                    bestOdds = 1.85;
                 }
 
-                if (prob > 0) {
+                if (prob >= 0.62) { // Minimum threshold to even consider an alert
                     // Check Risk Model BEFORE calculating financial stakes
                     if (!risk.shouldBet) {
                         console.log(`[Sniper] Skipped ${fixture.teams.home.name} due to Risk: ${risk.flags[0]?.label}`);
                         continue;
                     }
 
-                    // Fix: Pass object to calculateKellyStake
                     const kellyResult = calculateKellyStake({
                         bankroll: 1000,
-                        probability: prob * 100, // It expects 0-100
+                        probability: prob * 100,
                         odds: bestOdds
                     });
 
-                    // Only alert if Kelly recommends a bet
                     if (kellyResult.recommendation === 'BET' || kellyResult.recommendation === 'CAUTION') {
-                        // Double check edge is sufficient
-                        const edge = kellyResult.expectedValue; // This is %
+                        const edge = kellyResult.expectedValue;
 
-                        // v2.1 PERSISTENCE CHECK (Anti-Noise)
-                        // This section is removed as per instruction.
-                        // The original code had logic for `existingAnalysis`, `shouldSendAlert`, and `db` operations.
-                        // Now, we directly send the alert if Kelly recommends a bet.
                         await sendSniperAlert({
                             fixtureId: fixture.fixture.id,
                             homeTeam: fixture.teams.home.name,

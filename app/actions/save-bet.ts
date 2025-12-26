@@ -3,7 +3,7 @@
 import { db } from '@/lib/db/client';
 import { matchAnalysis, betOutcome, NewBetOutcome, NewMatchAnalysis } from '@/lib/db/schema';
 import { revalidatePath } from 'next/cache';
-import { eq, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 export interface BetSelection {
     fixtureId: number;
@@ -26,10 +26,6 @@ export interface BetSelection {
 
 export async function saveUserSelection(data: BetSelection) {
     try {
-        const tables = await db.execute(sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
-        const tableList = (tables as any).map((t: any) => t.table_name).join(', ');
-        throw new Error(`DEBUG_PROBE: Tables: [${tableList}]`);
-
         console.log('Saving bet selection (v3.6):', data);
 
         // 1. Find or Auto-Create Match Analysis Record

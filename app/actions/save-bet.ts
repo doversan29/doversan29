@@ -48,7 +48,7 @@ export async function saveUserSelection(data: BetSelection) {
                 homeTeam: data.homeTeam,
                 awayTeam: data.awayTeam,
                 leagueName: data.leagueName || 'Unknown League',
-                matchDate: data.matchDate ? new Date(data.matchDate) : new Date(),
+                matchDate: data.matchDate && typeof data.matchDate === 'string' ? new Date(data.matchDate) : new Date(),
                 predictedOutcome: data.prediction?.outcome || 'UNKNOWN',
                 aiProbability: data.prediction?.probability || 0,
                 expectedGoalsHome: data.prediction?.xgHome || 0,

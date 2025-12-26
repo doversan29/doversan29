@@ -1,4 +1,4 @@
-import { calculatePoissonPrediction, calculateWeightedStats } from "@/lib/predictions";
+import { calculatePoissonPrediction, calculateWeightedStats, getRecommendedBet } from "@/lib/predictions";
 import { calibrateProbability } from "@/lib/analysis/calibration";
 import { analyzeRisk } from "@/lib/analysis/risk-model";
 import { format } from "date-fns";
@@ -193,6 +193,8 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
         awayWeighted
     );
 
+    const recommendedBet = getRecommendedBet(prediction, fixture.teams.home.name, fixture.teams.away.name);
+
     // ... EXPERT ANALYSIS SECTION (Modified) ...
     return (
         <div className="space-y-8 pb-20">
@@ -373,9 +375,7 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
                                 {riskAnalysis.shouldBet ? (
                                     <>
                                         <p className="text-lg font-medium text-emerald-100">
-                                            {Number(winProb) > 50 ? `${fixture.teams.home.name} to Win` :
-                                                Number(lossProb) > 50 ? `${fixture.teams.away.name} to Win` :
-                                                    "Double Chance / Under 2.5 Goals"}
+                                            {recommendedBet}
                                         </p>
                                         <p className="text-xs text-emerald-400/60 mt-1">Confidence: {Math.max(Number(winProb), Number(drawProb), Number(lossProb))}%</p>
                                     </>
@@ -388,17 +388,17 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
                                     </>
                                 )}
                             </div>
+
+                            {/* Value Calculator Client Component */}
+                            <ValueBetCalculator
+                                winProb={Number(winProb)}
+                                drawProb={Number(drawProb)}
+                                lossProb={Number(lossProb)}
+                                homeName={fixture.teams.home.name}
+                                awayName={fixture.teams.away.name}
+                            />
                         </div>
                     </div>
-
-                    {/* Value Calculator Client Component */}
-                    <ValueBetCalculator
-                        winProb={Number(winProb)}
-                        drawProb={Number(drawProb)}
-                        lossProb={Number(lossProb)}
-                        homeName={fixture.teams.home.name}
-                        awayName={fixture.teams.away.name}
-                    />
                 </div>
             </div>
 

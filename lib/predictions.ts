@@ -92,3 +92,20 @@ export function calculateWeightedStats(seasonStats: TeamStats, recentStats: Team
         conceded: (seasonStats.conceded / seasonStats.played * seasonWeight) + (recentStats.conceded / recentStats.played * recentWeight)
     };
 }
+
+export function getRecommendedBet(prediction: PredictionResult, homeName: string, awayName: string): string {
+    const { homeWinProb, awayWinProb, expectedGoalsHome, expectedGoalsAway } = prediction;
+    const totalXG = expectedGoalsHome + expectedGoalsAway;
+
+    // 1. Clear Winner
+    if (homeWinProb > 0.50) return `${homeName} to Win`;
+    if (awayWinProb > 0.50) return `${awayName} to Win`;
+
+    // 2. Draw / Tight Game -> Look at Goals
+    let goalPick = "";
+    if (totalXG > 2.6) goalPick = "Over 2.5 Goals";
+    else if (totalXG < 2.3) goalPick = "Under 2.5 Goals";
+    else goalPick = "BTTS / Both Score"; // Match tight and average goals
+
+    return `Double Chance / ${goalPick || "Draw"}`;
+}

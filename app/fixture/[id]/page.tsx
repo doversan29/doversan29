@@ -153,8 +153,9 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
     const awayWeighted = calculateWeightedStats(awayStats, awayRecentStats, 0.4);
 
 
-    // Poisson Prediction
-    const prediction = calculatePoissonPrediction(homeWeighted, awayWeighted, leagueAvgHome, leagueAvgAway);
+    // Poisson Prediction (v2.7 Reality Injection)
+    const isNeutral = (fixture.fixture as any).venue?.neutral || false;
+    const prediction = calculatePoissonPrediction(homeWeighted, awayWeighted, leagueAvgHome, leagueAvgAway, isNeutral);
 
     // Calibrate Probabilities
     if (prediction) {

@@ -73,30 +73,32 @@ export async function updateCalibration(
  * Returns a multiplier. If model says 0.70 but accuracy is 0.60, factor is 0.85 (penalty).
  */
 export async function getCalibrationFactor(leagueId: number, rawProb: number): Promise<number> {
-    const bucket = getProbabilityBucket(rawProb);
+    try {
+        const bucket = getProbabilityBucket(rawProb);
 
-    const record = await db.select()
-        .from(modelCalibration)
-        .where(and(
-            eq(modelCalibration.leagueId, leagueId),
-            sql`ABS(${modelCalibration.probabilityBucket} - ${bucket}) < 0.001`
-        ))
-        .limit(1);
+        const record = await db.select()
+            .from(modelCalibration)
+            .where(and(
+                eq(modelCalibration.leagueId, leagueId),
+                sql`ABS(${modelCalibration.probabilityBucket} - ${bucket}) < 0.001`
+            ))
+            .limit(1);
 
-    if (record.length === 0 || (record[0].totalPredictions || 0) < 10) {
-        return 1.0; // Not enough data to calibrate
+        if (record.length === 0 || (record[0].totalPredictions || 0) < 10) {
+            return 1.0; // Not enough data to calibrate
+        }
+
+        const actual = record[0].actualAccuracy || 0;
+        const expected = record[0].probabilityBucket; // e.g. 0.70 (representing 0.70-0.75 range)
+
+        // Avoid division by zero
+        if (expected === 0) return 1.0;
+
+        return actual / (expected + (BUCKET_SIZE / 2));
+    } catch (e) {
+        console.error("Calibration DB error (Table might be missing):", e);
+        return 1.0; // Fallback to raw probability
     }
-
-    const actual = record[0].actualAccuracy || 0;
-    const expected = record[0].probabilityBucket; // e.g. 0.70 (representing 0.70-0.75 range)
-
-    // Avoid division by zero
-    if (expected === 0) return 1.0;
-
-    // Calculate Factor
-    // Example: Expected 0.70, Actual 0.50 -> Factor = 0.71 (Penalize)
-    // Example: Expected 0.70, Actual 0.80 -> Factor = 1.14 (Boost)
-    return actual / (expected + (BUCKET_SIZE / 2)); // Compare to mid-point of bucket
 }
 
 /**

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Save, CheckCircle, AlertCircle, TrendingUp, Calculator } from 'lucide-react';
 import { saveUserSelection } from '@/app/actions/save-bet';
+import StakingCard from './StakingCard';
 
 interface StrategyProps {
     fixtureId: number;
@@ -209,6 +210,25 @@ export default function BettingStrategyCard({ fixtureId, homeName, awayName, pre
                         />
                     </div>
                 </div>
+
+                {/* Risk & Staking Module (v2.1) */}
+                <StakingCard
+                    initialBankroll={1000} // Default or fetched
+                    probability={
+                        selected.parlay ? (prediction.homeProb + prediction.awayProb) / 2 : // Approx for demo
+                            selected.winner ? Math.max(prediction.homeProb, prediction.awayProb) :
+                                selected.goals ? (prediction.expectedGoals > 2.5 ? 0.6 : 0.45) : // Static mapping for demo
+                                    0.5
+                    }
+                    odds={
+                        selected.parlay ? odds.parlay :
+                            selected.winner ? odds.winner :
+                                selected.goals ? odds.goals :
+                                    selected.corners ? odds.corners :
+                                        1.0
+                    }
+                    confidence={Math.max(prediction.homeProb, prediction.awayProb) * 100}
+                />
 
                 {/* Action Button */}
                 <button

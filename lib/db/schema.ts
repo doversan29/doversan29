@@ -8,6 +8,11 @@ export const userBankroll = pgTable('user_bankroll', {
   initialInvestment: real('initial_investment').notNull().default(100.0),
   totalProfit: real('total_profit').notNull().default(0),
   roi: real('roi').notNull().default(0), // ROI en porcentaje
+
+  // Risk Settings (v2.1)
+  kellyFraction: real('kelly_fraction').default(0.25), // Quarter Kelly by default
+  maxStakePercentage: real('max_stake_percentage').default(0.025), // 2.5% max per bet
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });

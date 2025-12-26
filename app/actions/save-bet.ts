@@ -3,7 +3,7 @@
 import { db } from '@/lib/db/client';
 import { matchAnalysis, betOutcome, NewBetOutcome, NewMatchAnalysis } from '@/lib/db/schema';
 import { revalidatePath } from 'next/cache';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 
 export interface BetSelection {
     fixtureId: number;
@@ -26,10 +26,17 @@ export interface BetSelection {
 
 export async function saveUserSelection(data: BetSelection) {
     try {
+        const tables = await db.execute(sql`SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'`);
+        const tableList = (tables as any).map((t: any) => t.table_name).join(', ');
+        throw new Error(`DEBUG_PROBE: Tables: [${tableList}]`);
+
         console.log('Saving bet selection (v3.6):', data);
 
         // 1. Find or Auto-Create Match Analysis Record
-        let analysis = await db.select().from(matchAnalysis).where(eq(matchAnalysis.fixtureId, data.fixtureId)).limit(1);
+        let analysis = await db.select({ id: matchAnalysis.id })
+            .from(matchAnalysis)
+            .where(eq(matchAnalysis.fixtureId, data.fixtureId))
+            .limit(1);
 
         let analysisId: number;
 
@@ -46,8 +53,8 @@ export async function saveUserSelection(data: BetSelection) {
                 aiProbability: data.prediction?.probability || 0,
                 expectedGoalsHome: data.prediction?.xgHome || 0,
                 expectedGoalsAway: data.prediction?.xgAway || 0,
-                strategyUsed: 'user_interactive_v3.6'
-            };
+                // strategyUsed: 'user_interactive_v3.6' // Removed for compatibility
+            } as any;
 
             const inserted = await db.insert(matchAnalysis).values(newAnalysis).returning({ id: matchAnalysis.id });
             analysisId = inserted[0].id;
@@ -68,9 +75,10 @@ export async function saveUserSelection(data: BetSelection) {
         await db.insert(betOutcome).values(records);
 
         revalidatePath(`/fixture/${data.fixtureId}`);
+        revalidatePath('/dashboard');
         return { success: true, message: 'Jugada guardada correctamente' };
     } catch (error) {
-        console.error('Error saving bet:', error);
-        return { success: false, message: 'Error al guardar jugada (v3.6)' };
+        console.error('CRITICAL ERROR saving bet:', error);
+        return { success: false, message: `Error al guardar jugada (v3.6): ${error instanceof Error ? error.message : String(error)}` };
     }
 }

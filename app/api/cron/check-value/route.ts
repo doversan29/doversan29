@@ -1,7 +1,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getUpcomingFixtures, getFixtureById, getLeagueStandings } from '@/lib/api-client';
-import { TeamStats, calculatePoissonPrediction } from '@/lib/predictions';
+import { TeamStats, calculatePoissonPrediction, getRecommendedBet, poissonProb } from '@/lib/predictions';
 import { db } from '@/lib/db/client';
 import { matchAnalysis } from '@/lib/db/schema';
 import { sql, eq } from 'drizzle-orm';

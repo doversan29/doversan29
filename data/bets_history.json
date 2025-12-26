@@ -1,5 +1,15 @@
 [
   {
+    "match": "Manual Match",
+    "selection": "Home Gana",
+    "stake": 10,
+    "odds": 2,
+    "id": "widdr8ji7",
+    "date": "2025-12-26T21:57:21.925Z",
+    "status": "PENDING",
+    "profit": 0
+  },
+  {
     "match": "Test Match",
     "selection": "",
     "stake": 10,
@@ -7,7 +17,7 @@
     "id": "hj1urw0i5",
     "date": "2025-12-17T23:39:09.531Z",
     "status": "WON",
-    "profit": 0
+    "profit": 10
   },
   {
     "match": "",

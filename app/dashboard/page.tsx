@@ -137,7 +137,12 @@ export default function DashboardPage() {
             {modelStats && (
                 <div className="space-y-4">
                     <div className="flex justify-between items-center">
-                        <h2 className="text-xl font-bold text-slate-300">🤖 Desempeño del Modelo IA</h2>
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-xl font-bold text-slate-300">🤖 Desempeño del Modelo IA</h2>
+                            <span className="bg-blue-500/10 text-blue-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-500/20 animate-pulse">
+                                MODE: ULTRA-CONSERVATIVE v3.7
+                            </span>
+                        </div>
                         <button
                             onClick={handleVerifyModel}
                             disabled={verifying}
@@ -160,8 +165,8 @@ export default function DashboardPage() {
                             </p>
                         </div>
                         <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
-                            <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Predicciones Totales</p>
-                            <p className="text-3xl font-black text-slate-200">{modelStats.history.length}</p>
+                            <p className="text-slate-500 text-xs font-bold uppercase tracking-wider mb-1">Dampener de Realidad</p>
+                            <p className="text-3xl font-black text-blue-400">-10%</p>
                         </div>
                     </div>
 

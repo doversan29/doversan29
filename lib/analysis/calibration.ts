@@ -96,8 +96,8 @@ export async function getCalibrationFactor(leagueId: number, rawProb: number): P
 
         return actual / (expected + (BUCKET_SIZE / 2));
     } catch (e) {
-        console.error("Calibration DB error (Table might be missing):", e);
-        return 1.0; // Fallback to raw probability
+        // Silent fallback for calibration - table may not exist in all environments
+        return 1.0;
     }
 }
 

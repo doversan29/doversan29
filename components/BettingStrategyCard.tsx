@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, CheckCircle, AlertCircle, TrendingUp, Calculator } from 'lucide-react';
 import { saveUserSelection } from '@/app/actions/save-bet';
 import StakingCard from './StakingCard';
@@ -30,12 +30,14 @@ interface StrategyProps {
 export default function BettingStrategyCard({ fixtureId, homeName, awayName, leagueName, matchDate, prediction, recommendedBet, realOdds }: StrategyProps) {
     const [saved, setSaved] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [bankroll, setBankroll] = useState(1000); // Dynamic fallback
 
     // Live Odds from API (v3.5)
     const [odds, setOdds] = useState({
         winner: realOdds?.home || 1.75,
         goals: 1.85,
         corners: 1.50,
+        cards: 1.90, // v4.0 Default
         parlay: (realOdds?.home || 1.75) * 1.85 * 1.50
     });
 
@@ -43,19 +45,47 @@ export default function BettingStrategyCard({ fixtureId, homeName, awayName, lea
         winner: false,
         goals: false,
         corners: false,
+        cards: false,
         parlay: false
     });
 
+    // Fetch Real Bankroll (v4.0)
+    useEffect(() => {
+        const fetchBankroll = async () => {
+            try {
+                const res = await fetch('/api/bankroll');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data?.currentBalance) setBankroll(data.currentBalance);
+                }
+            } catch (e) {
+                console.warn("Failed to fetch bankroll, using fallback");
+            }
+        };
+        fetchBankroll();
+    }, []);
+
     // Dynamic Labels (v3.6 Stricter Thresholds)
-    const winnerLabel = prediction.homeProb > prediction.awayProb ? `Winner: ${homeName}` : `Winner: ${awayName}`;
-    const goalsLabel = prediction.expectedGoals > 2.5 ? "Goals: Over 2.5" : "Goals: Under 2.5";
+    const winnerLabel = prediction.homeProb > prediction.awayProb ? `Gana: ${homeName}` : `Gana: ${awayName}`;
+    const goalsLabel = prediction.expectedGoals > 2.5 ? "Goles: Más de 2.5" : "Goles: Menos de 2.5";
 
     // Corners Logic v3.6
-    let cornersLabel = "Corners: Under 9.5";
-    if (recommendedBet.includes("Corners")) {
+    let cornersLabel = "Córners: Menos de 9.5";
+    if (recommendedBet.includes("Córners")) {
         cornersLabel = recommendedBet;
     } else {
-        cornersLabel = prediction.cornerProb?.over95 && prediction.cornerProb.over95 > 0.65 ? "Corners: Over 9.5" : "Corners: Under 9.5";
+        cornersLabel = prediction.cornerProb?.over95 && prediction.cornerProb.over95 > 0.65 ? "Córners: Más de 9.5" : "Córners: Menos de 9.5";
+    }
+
+    // Cards Logic v4.0
+    const hasCardData = (prediction as any).cardProb !== undefined;
+    let cardsLabel = "Tarjetas: Menos de 4.5";
+    if (hasCardData) {
+        if (recommendedBet.includes("Tarjetas")) {
+            cardsLabel = recommendedBet;
+        } else {
+            cardsLabel = (prediction as any).cardProb?.over45 > 0.65 ? "Tarjetas: Más de 4.5" : "Tarjetas: Menos de 4.5";
+        }
     }
 
     const handleSave = async () => {
@@ -68,6 +98,7 @@ export default function BettingStrategyCard({ fixtureId, homeName, awayName, lea
             if (selected.winner) selections.push({ type: 'MONEYLINE' as const, label: winnerLabel, odds: odds.winner });
             if (selected.goals) selections.push({ type: 'GOALS' as const, label: goalsLabel, odds: odds.goals });
             if (selected.corners) selections.push({ type: 'CORNERS' as const, label: cornersLabel, odds: odds.corners });
+            if (selected.cards) selections.push({ type: 'CORNERS' as const, label: cardsLabel, odds: odds.cards }); // Reuse CORNERS type or update schema
         }
 
         if (selections.length === 0) {
@@ -92,17 +123,22 @@ export default function BettingStrategyCard({ fixtureId, homeName, awayName, lea
         });
 
         if (result.success) {
+            console.log("Bet saved successfully, updating UI state.");
             setSaved(true);
+            // Optional: trigger a bankroll refresh if we had a global state, 
+            // but for now, the revalidatePath handle it on next navigation/refresh
         } else {
+            console.error("Save failed:", result.message);
             alert(result.message);
+            setLoading(false); // Only reset loading if it failed
         }
-        setLoading(false);
+        // Don't reset loading to false if success, stay in saved state
     };
 
     const toggle = (key: keyof typeof selected) => {
         if (key === 'parlay') {
             // Exclusive logic: Parlay unchecks others
-            setSelected({ winner: false, goals: false, corners: false, parlay: !selected.parlay });
+            setSelected({ winner: false, goals: false, corners: false, cards: false, parlay: !selected.parlay });
         } else {
             // Individual check unchecks Parlay
             setSelected({ ...selected, parlay: false, [key]: !selected[key] });
@@ -200,6 +236,32 @@ export default function BettingStrategyCard({ fixtureId, homeName, awayName, lea
                     </div>
                 </div>
 
+                {/* Row 4: Cards (v4.0) */}
+                {hasCardData && (
+                    <div className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${selected.cards ? 'bg-indigo-900/40 border-indigo-500/50' : 'bg-slate-950 border-slate-800'}`}>
+                        <div className="flex items-center gap-3">
+                            <input
+                                type="checkbox"
+                                checked={selected.cards}
+                                onChange={() => toggle('cards')}
+                                className="w-5 h-5 rounded border-slate-600 text-indigo-600 focus:ring-indigo-500 bg-slate-900"
+                            />
+                            <label className="text-sm font-medium text-slate-200 cursor-pointer" onClick={() => toggle('cards')}>
+                                {cardsLabel}
+                            </label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs text-slate-500">Odds</span>
+                            <input
+                                type="number"
+                                value={odds.cards}
+                                onChange={(e) => setOdds({ ...odds, cards: parseFloat(e.target.value) })}
+                                className="w-16 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-center text-white focus:border-indigo-500 outline-none font-mono"
+                            />
+                        </div>
+                    </div>
+                )}
+
                 {/* Divider & Parlay */}
                 <div className="relative py-2">
                     <div className="absolute inset-0 flex items-center">
@@ -236,21 +298,23 @@ export default function BettingStrategyCard({ fixtureId, homeName, awayName, lea
                     </div>
                 </div>
 
-                {/* Risk & Staking Module (v2.1) */}
+                {/* Risk & Staking Module (v4.0 Bankroll Aware) */}
                 <StakingCard
-                    initialBankroll={1000} // Default or fetched
+                    initialBankroll={bankroll}
                     probability={
-                        selected.parlay ? (prediction.homeProb + prediction.awayProb) / 2 : // Approx for demo
+                        selected.parlay ? (prediction.homeProb + prediction.awayProb) / 2 :
                             selected.winner ? Math.max(prediction.homeProb, prediction.awayProb) :
-                                selected.goals ? (prediction.expectedGoals > 2.5 ? 0.6 : 0.45) : // Static mapping for demo
-                                    0.5
+                                selected.goals ? (prediction.expectedGoals > 2.5 ? 0.6 : 0.45) :
+                                    selected.cards ? ((prediction as any).cardProb?.over45 || 0.5) :
+                                        0.5
                     }
                     odds={
                         selected.parlay ? odds.parlay :
                             selected.winner ? odds.winner :
                                 selected.goals ? odds.goals :
                                     selected.corners ? odds.corners :
-                                        1.0
+                                        selected.cards ? odds.cards :
+                                            1.0
                     }
                     confidence={Math.max(prediction.homeProb, prediction.awayProb) * 100}
                 />

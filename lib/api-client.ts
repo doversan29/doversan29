@@ -143,10 +143,13 @@ export async function getTeamStatsPremium(teamId: number, leagueId: number, seas
     }
 }
 
-export async function getUpcomingFixtures(leagueIds: number[]): Promise<any[]> {
+export async function getUpcomingFixtures(leagueIds: number[], forceEmptyRefresh: boolean = false): Promise<any[]> {
     const allFixtures: any[] = [];
-    const today = format(new Date(), 'yyyy-MM-dd');
-    const nextWeek = format(addDays(new Date(), 7), 'yyyy-MM-dd');
+    const now = new Date();
+    const today = format(now, 'yyyy-MM-dd');
+    const nextWeek = format(addDays(now, UPCOMING_DAYS), 'yyyy-MM-dd');
+
+    console.log(`[INTERNAL] Fetching fixtures from ${today} to ${nextWeek}`);
 
     console.log(`[API] Fetching fixtures from ${today} to ${nextWeek} for ${leagueIds.length} leagues`);
 
@@ -154,7 +157,7 @@ export async function getUpcomingFixtures(leagueIds: number[]): Promise<any[]> {
         try {
             const params = {
                 league: leagueId.toString(),
-                season: new Date().getFullYear().toString(),
+                season: (new Date().getFullYear()).toString(), // Try current year first
                 from: today,
                 to: nextWeek,
                 timezone: 'America/Chicago'
@@ -164,7 +167,9 @@ export async function getUpcomingFixtures(leagueIds: number[]): Promise<any[]> {
 
             if (Array.isArray(data) && data.length > 0) {
                 allFixtures.push(...data);
-                console.log(`[API] League ${leagueId}: ${data.length} fixtures found`);
+                console.log(`[API SUCCESS] League ${leagueId}: Found ${data.length} upcoming matches`);
+            } else {
+                console.log(`[API EMPTY] League ${leagueId}: No matches found for period ${today} - ${nextWeek}`);
             }
 
             // Rate limiting: small pause between requests
@@ -278,6 +283,21 @@ export async function getTopScorers(leagueId: number, season: number = 2025) {
         return data || [];
     } catch (error) {
         console.error(`Error fetching top scorers for league ${leagueId}:`, error);
+        return [];
+    }
+}
+
+
+export async function getLiveFixtures() {
+    try {
+        const data = await fetchApi('fixtures', {
+            live: 'all',
+            timezone: 'America/Chicago'
+        }, { revalidate: 30 });
+
+        return data || [];
+    } catch (error) {
+        console.error("Error fetching live fixtures:", error);
         return [];
     }
 }

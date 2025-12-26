@@ -1,5 +1,8 @@
 import fs from 'fs';
 import path from 'path';
+import { db } from './db/client';
+import { betOutcome, matchAnalysis } from './db/schema';
+import { desc, eq } from 'drizzle-orm';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const BETS_FILE = path.join(DATA_DIR, 'bets_history.json');
@@ -32,20 +35,52 @@ export interface BankrollStats {
 const INITIAL_BANKROLL = 1000;
 
 export async function getBankrollStats(): Promise<BankrollStats> {
-    if (!fs.existsSync(BETS_FILE)) {
-        // Return default empty state
-        return {
-            currentBalance: INITIAL_BANKROLL,
-            totalBets: 0,
-            wins: 0,
-            losses: 0,
-            roi: 0,
-            history: []
-        };
+    // 1. Fetch JSON History
+    let jsonHistory: Bet[] = [];
+    if (fs.existsSync(BETS_FILE)) {
+        try {
+            const content = fs.readFileSync(BETS_FILE, 'utf-8');
+            jsonHistory = JSON.parse(content);
+        } catch (e) {
+            console.error("Error reading JSON bankroll:", e);
+        }
     }
 
-    const content = fs.readFileSync(BETS_FILE, 'utf-8');
-    const history: Bet[] = JSON.parse(content);
+    // 2. Fetch Database History (v4.0 Sync)
+    let dbHistory: Bet[] = [];
+    try {
+        const dbPicks = await db.select({
+            id: betOutcome.id,
+            status: betOutcome.status,
+            stake: betOutcome.stakeAmount,
+            odds: betOutcome.selectedOdds,
+            createdAt: betOutcome.createdAt,
+            home: matchAnalysis.homeTeam,
+            away: matchAnalysis.awayTeam,
+            betType: betOutcome.betType
+        })
+            .from(betOutcome)
+            .innerJoin(matchAnalysis, eq(betOutcome.analysisId, matchAnalysis.id))
+            .orderBy(desc(betOutcome.createdAt));
+
+        dbHistory = dbPicks.map(p => ({
+            id: `db_${p.id}`,
+            date: p.createdAt.toISOString(),
+            match: `${p.home} vs ${p.away}`,
+            selection: p.betType || 'Pick',
+            stake: p.stake || 10,
+            odds: p.odds || 1.80,
+            status: (p.status?.toUpperCase() as any) || 'PENDING',
+            profit: 0 // Calculated below
+        }));
+    } catch (e) {
+        console.error("Error fetching DB picks for bankroll:", e);
+    }
+
+    // 3. Merge and Sort
+    const combinedHistory = [...jsonHistory, ...dbHistory].sort((a, b) =>
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+    );
 
     let currentBalance = INITIAL_BANKROLL;
     let wins = 0;
@@ -53,30 +88,33 @@ export async function getBankrollStats(): Promise<BankrollStats> {
     let totalStaked = 0;
     let totalProfit = 0;
 
-    history.forEach(bet => {
+    combinedHistory.forEach(bet => {
         totalStaked += bet.stake;
+        // Calculate dynamic profit based on status
         if (bet.status === 'WON') {
-            const profit = (bet.stake * bet.odds) - bet.stake;
-            currentBalance += profit;
-            totalProfit += profit;
+            bet.profit = (bet.stake * bet.odds) - bet.stake;
+            currentBalance += bet.profit;
+            totalProfit += bet.profit;
             wins++;
         } else if (bet.status === 'LOST') {
+            bet.profit = -bet.stake;
             currentBalance -= bet.stake;
             totalProfit -= bet.stake;
             losses++;
+        } else {
+            bet.profit = 0;
         }
-        // PENDING/VOID don't affect balance yet (simplified)
     });
 
     const roi = totalStaked > 0 ? (totalProfit / totalStaked) * 100 : 0;
 
     return {
         currentBalance,
-        totalBets: history.length,
+        totalBets: combinedHistory.length,
         wins,
         losses,
         roi,
-        history
+        history: combinedHistory
     };
 }
 

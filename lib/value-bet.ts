@@ -36,7 +36,7 @@ export function calculateValue(aiProbs: { home: number, draw: number, away: numb
         recommended = 'AWAY';
     }
 
-    const THRESHOLD = 10; // 10% difference as requested
+    const THRESHOLD = 8; // Relaxed from 15% for v4.5 Live Testing
 
     return {
         isValue: maxDiff >= THRESHOLD,

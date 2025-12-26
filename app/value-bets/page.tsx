@@ -20,9 +20,8 @@ export default async function ValueBetsPage() {
     // 3. Match Fixtures with Odds and calculate Value
     const valueBets = [];
 
-    // To optimize, we'd need to fetch standings/history for all teams
-    // For now, we only process the first 10 matches to avoid overwhelming the API/system if many
-    const fixturesToProcess = fixtures.slice(0, 15);
+    // Process more matches for better coverage
+    const fixturesToProcess = fixtures.slice(0, 30);
 
     for (const fixture of fixturesToProcess) {
         const fixtureOdds = oddsList.find((o: any) => o.fixture.id === fixture.fixture.id);
@@ -38,13 +37,18 @@ export default async function ValueBetsPage() {
             away: parseFloat(winnerBet.values.find((v: any) => v.value === 'Away')?.odd || '0')
         };
 
-        if (!odds.home || !odds.draw || !odds.away) continue;
+        if (!odds.home || !odds.draw || !odds.away) {
+            console.log(`Missing odds for ${fixture.fixture.id}`);
+            continue;
+        }
 
         // Fetch Stats (Cached)
         const [standings, history] = await Promise.all([
             getLeagueStandings(fixture.league.id, fixture.league.season),
             getLeagueHistory(fixture.league.id, fixture.league.season)
         ]);
+
+        if (!standings || standings.length === 0) continue;
 
         const homeForm = calculateTeamForm(fixture.teams.home.id, history);
         const awayForm = calculateTeamForm(fixture.teams.away.id, history);
@@ -60,9 +64,9 @@ export default async function ValueBetsPage() {
         const awayStats = getStats(fixture.teams.away.id, 'away');
 
         const prediction = calculatePoissonPrediction(
-            calculateWeightedStats(homeStats, { played: 1, scored: homeForm.avgGoalsScored, conceded: homeForm.avgGoalsConceded }, 0.3),
-            calculateWeightedStats(awayStats, { played: 1, scored: awayForm.avgGoalsScored, conceded: awayForm.avgGoalsConceded }, 0.3),
-            1.5, 1.2
+            calculateWeightedStats(homeStats, { played: 1, scored: homeForm.avgGoalsScored, conceded: homeForm.avgGoalsConceded }, 0.4),
+            calculateWeightedStats(awayStats, { played: 1, scored: awayForm.avgGoalsScored, conceded: awayForm.avgGoalsConceded }, 0.4),
+            1.35, 1.15
         );
 
         const analysis = calculateValue(
@@ -86,7 +90,7 @@ export default async function ValueBetsPage() {
                     <span className="gradient-text">Oportunidades de Valor</span>
                 </h1>
                 <p className="text-slate-400">
-                    Partidos donde nuestra IA detecta una probabilidad al menos un 10% mayor que la estimada por las casas de apuestas.
+                    Partidos donde nuestra IA detecta una probabilidad al menos un 8% mayor que la estimada por las casas de apuestas.
                 </p>
             </div>
 
@@ -119,7 +123,7 @@ export default async function ValueBetsPage() {
                     <TrendingUp className="w-4 h-4" /> ¿Cómo funciona?
                 </h3>
                 <p className="text-slate-400 text-sm leading-relaxed">
-                    Comparamos la **Probabilidad Implícita** de las cuotas (ej. cuota 2.00 = 50%) con la probabilidad proyectada por nuestro modelo **Poisson Dist** ajustado por forma reciente. Si la diferencia es positiva, existe una "ventaja matemática" a largo plazo.
+                    Comparamos la **Probabilidad Implícita** de las cuotas (ej. cuota 2.00 = 50%) con la probabilidad proyectada por nuestro modelo **Poisson Dist** ajustado por forma reciente. Si la diferencia es positiva (al menos 8%), existe una "ventaja matemática" a largo plazo.
                 </p>
             </div>
         </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { TOP_LEAGUES, REGIONS } from '@/lib/config';
-import { Trophy, Calendar, CheckSquare, LayoutDashboard, Sparkles, RefreshCw, Gem, TrendingUp } from 'lucide-react';
+import { Trophy, Calendar, CheckSquare, LayoutDashboard, Sparkles, RefreshCw, Gem, TrendingUp, Activity } from 'lucide-react';
 
 import { refreshData } from '@/app/actions';
 import Link from 'next/link';
@@ -89,6 +89,13 @@ export default function Sidebar() {
                 )}>
                     <Gem className="w-5 h-5 text-blue-400" />
                     Cuotas de Valor
+                </Link>
+                <Link href="/live" className={classNames(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                    pathname === '/live' ? "bg-emerald-600/10 text-emerald-400" : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                )}>
+                    <Activity className="w-5 h-5 text-emerald-400" />
+                    Live Scanner
                 </Link>
             </nav>
 

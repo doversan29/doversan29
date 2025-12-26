@@ -4,7 +4,8 @@ import { analyzeRisk } from "@/lib/analysis/risk-model";
 import { format } from "date-fns";
 import { es } from 'date-fns/locale';
 import Link from "next/link";
-import { ArrowLeft, TrendingUp, AlertCircle, Calculator, History, Activity, Flame, Snowflake, Clock, User } from "lucide-react";
+import { ArrowLeft, TrendingUp, AlertCircle, Calculator, History, Activity, Flame, Snowflake, Clock, User, Zap } from "lucide-react";
+import RadarChart from '@/components/RadarChart';
 import { getFixtureById, getLeagueStandings, getLeagueHistory, getMarketOdds, getCurrentSeason, getTeamStatsPremium } from "@/lib/api-client";
 import { getMatchOdds } from "@/lib/odds";
 import ValueBetCalculator from "@/components/ValueBetCalculator";
@@ -196,14 +197,64 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
             {/* Expert Analysis Section */}
             <div className="bg-gradient-to-br from-blue-900/40 to-slate-900 border border-blue-500/30 rounded-2xl p-6 shadow-xl relative overflow-hidden">
                 <div className="absolute top-0 right-0 p-20 bg-blue-500/10 rounded-full blur-3xl pointer-events-none -mr-10 -mt-10"></div>
+
+                {/* Market Sentinel v4.5 */}
+                {recommendedBet.includes("STEAM MOVE") && (
+                    <div className="mb-6 flex items-center gap-3 bg-amber-500/20 border border-amber-500/50 p-3 rounded-lg animate-pulse">
+                        <Zap className="w-5 h-5 text-amber-500 fill-amber-500" />
+                        <div>
+                            <p className="text-sm font-black text-amber-400">SMART MONEY DETECTED</p>
+                            <p className="text-[10px] text-amber-500 font-bold uppercase">The market is moving sharply in favor of this pick.</p>
+                        </div>
+                    </div>
+                )}
+
                 <div className="relative z-10">
                     <div className="flex items-center gap-3 mb-4">
                         <div className="bg-blue-500/20 p-2 rounded-lg">
                             <User className="w-6 h-6 text-blue-400" />
                         </div>
                         <h3 className="text-xl font-bold text-white">Análisis del Experto</h3>
+                    </div>
 
-                        <div className="ml-auto flex gap-2">
+                    {/* Tactical Radar v4.5 */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 pb-8 border-b border-blue-500/10">
+                        <div className="flex justify-center">
+                            <RadarChart
+                                data={prediction.tactical!}
+                                teamName={fixture.teams.home.name}
+                                color="#3b82f6"
+                            />
+                        </div>
+                        <div className="flex justify-center">
+                            <RadarChart
+                                data={{
+                                    attack: 60, // Mock for away team for now or calculate properly
+                                    defense: 70,
+                                    possession: 50,
+                                    corners: 55,
+                                    cards: 40,
+                                    form: 80
+                                }}
+                                teamName={fixture.teams.away.name}
+                                color="#8b5cf6"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+                        {/* Market Sentiment Banner */}
+                        {recommendedBet.includes("STEAM MOVE") && (
+                            <div className="flex items-center gap-3 bg-amber-500/20 border border-amber-500/50 p-3 rounded-lg animate-pulse">
+                                <Zap className="w-5 h-5 text-amber-500 fill-amber-500" />
+                                <div>
+                                    <p className="text-sm font-black text-amber-400">SMART MONEY DETECTED</p>
+                                    <p className="text-[10px] text-amber-500 font-bold uppercase">The market is moving sharply in favor of this pick.</p>
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex gap-2 justify-end lg:justify-start"> {/* Adjusted for new grid layout */}
                             {riskAnalysis.riskLevel === 'CRITICAL' || riskAnalysis.riskLevel === 'HIGH' ? (
                                 <span className="bg-red-500/90 text-white text-[10px] font-black px-2 py-1 rounded flex items-center gap-1 shadow-lg shadow-red-500/20">
                                     <AlertCircle className="w-3 h-3" /> HIGH RISK
@@ -358,6 +409,17 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
                                     <span className="text-2xl font-bold text-white">{prediction.expectedGoalsAway.toFixed(2)}</span>
                                 </div>
                             </div>
+
+                            {prediction.expectedCardsHome !== undefined && prediction.expectedCardsAway !== undefined && (
+                                <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700">
+                                    <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Tarjetas Proyectadas (Yell/Red)</p>
+                                    <div className="flex justify-between items-end">
+                                        <span className="text-2xl font-bold text-yellow-500">{prediction.expectedCardsHome.toFixed(1)}</span>
+                                        <span className="text-slate-600 mb-1">vs</span>
+                                        <span className="text-2xl font-bold text-yellow-500">{prediction.expectedCardsAway.toFixed(1)}</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Interactive Strategy Card */}

@@ -138,15 +138,15 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
         }
     }
 
-    // Poisson Prediction (v3.0 Premium)
+    // Poisson Prediction (v3.1 Dynamic)
     const isNeutral = (fixture.fixture as any).venue?.neutral || false;
     const prediction = calculatePoissonPrediction(
         homePremiumStats,
         awayPremiumStats,
-        seasonYear,
         leagueAvgHome,
         leagueAvgAway,
-        isNeutral
+        isNeutral,
+        seasonYear
     );
 
     // Calibrate Probabilities

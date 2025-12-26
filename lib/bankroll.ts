@@ -63,7 +63,7 @@ export async function getBankrollStats(): Promise<BankrollStats> {
             .innerJoin(matchAnalysis, eq(betOutcome.analysisId, matchAnalysis.id))
             .orderBy(desc(betOutcome.createdAt));
 
-        dbHistory = dbPicks.map(p => ({
+        dbHistory = dbPicks.map((p: typeof dbPicks[0]) => ({
             id: `db_${p.id}`,
             date: p.createdAt.toISOString(),
             match: `${p.home} vs ${p.away}`,

@@ -37,7 +37,7 @@ function poissonProb(k: number, lambda: number): number {
 }
 
 /**
- * POISSON ENGINE (v3.5 - ANTI-BIAS & CORNER QUANT)
+ * POISSON ENGINE (v3.6 - REALITY DAMPENER & ULTRA-CONSERVATISM)
  */
 export function calculatePoissonPrediction(
     homeData: any,
@@ -53,24 +53,20 @@ export function calculatePoissonPrediction(
 
     let hAttack: number, hDefense: number;
     let aAttack: number, aDefense: number;
-    let hCornersAvg: number = 5.0, aCornersAvg: number = 4.5;
+    let hCornersAvg: number = 4.8, aCornersAvg: number = 4.2; // Slightly more conservative defaults
     let usesVenueSpecificAvg = false;
 
     if (isPremium(homeData) && isPremium(awayData)) {
-        // PREMIUM MODE: Use Averaged Stats (Specific to Venue)
-        hAttack = parseFloat(homeData.goals.for.average.home) || 1.25;
-        hDefense = parseFloat(homeData.goals.against.average.home) || 1.25;
-        aAttack = parseFloat(awayData.goals.for.average.away) || 1.15;
-        aDefense = parseFloat(awayData.goals.against.average.away) || 1.15;
+        hAttack = parseFloat(homeData.goals.for.average.home) || 1.20;
+        hDefense = parseFloat(homeData.goals.against.average.home) || 1.20;
+        aAttack = parseFloat(awayData.goals.for.average.away) || 1.10;
+        aDefense = parseFloat(awayData.goals.against.average.away) || 1.10;
 
-        // CORNER DATA (From Premium API)
-        hCornersAvg = parseFloat(homeData.corners?.average?.home) || 5.0;
-        aCornersAvg = parseFloat(awayData.corners?.average?.away) || 4.5;
+        hCornersAvg = parseFloat(homeData.corners?.average?.home) || 4.8;
+        aCornersAvg = parseFloat(awayData.corners?.average?.away) || 4.2;
 
         usesVenueSpecificAvg = true;
-        console.log(`[PREMIUM v3.5] Engine running with Real Corner Data: H=${hCornersAvg}, A=${aCornersAvg}`);
     } else {
-        // LEGACY MODE
         const getRate = (data: any, type: 'scored' | 'conceded') => (type === 'scored' ? data.scored : data.conceded) / Math.max(data.played, 1);
         hAttack = getRate(homeData, 'scored');
         hDefense = getRate(homeData, 'conceded');
@@ -78,9 +74,8 @@ export function calculatePoissonPrediction(
         aDefense = getRate(awayData, 'conceded');
     }
 
-    // 2. STRENGTH NORMALIZATION
-    // We strictly limit max strength to avoid "All Overs"
-    const normalize = (val: number, avg: number) => Math.min(val / avg, 2.2);
+    // 2. STRENGTH NORMALIZATION (Stricter v3.6)
+    const normalize = (val: number, avg: number) => Math.min(val / avg, 2.0); // Capped at 2.0x league strength
     const hStrAttack = normalize(hAttack, leagueAvgHomeGoals);
     const hStrDefense = normalize(hDefense, leagueAvgAwayGoals);
     const aStrAttack = normalize(aAttack, leagueAvgAwayGoals);
@@ -90,19 +85,34 @@ export function calculatePoissonPrediction(
     let eHome = hStrAttack * aStrDefense * leagueAvgHomeGoals;
     let eAway = aStrAttack * hStrDefense * leagueAvgAwayGoals;
 
-    // No HFA on Premium (already included in home-specific average)
+    // REALITY DAMPENER (v3.6): 
+    // Models often overestimate "Over" scenarios. Applying a 10% reduction to projections 
+    // to account for tactical cancellations, red cards, and defensive pivots.
+    const DAMPENER = 0.90;
+    eHome *= DAMPENER;
+    eAway *= DAMPENER;
+
     if (!isNeutral && !usesVenueSpecificAvg) eHome *= 1.15;
 
-    // MANDATORY SAFETY CAPS
-    eHome = Math.min(Math.max(eHome, 0.1), 3.20);
-    eAway = Math.min(Math.max(eAway, 0.1), 3.00);
+    // ULTRA-CONSERVATIVE CAPS (v3.6)
+    // No match can have more than 2.9 total projected xG in the initial model pass.
+    // This forces the "Over 2.5" recommendation to be much harder to trigger.
+    const TOTAL_CAP = 2.90;
+    const totalXG = eHome + eAway;
+    if (totalXG > TOTAL_CAP) {
+        const ratio = TOTAL_CAP / totalXG;
+        eHome *= ratio;
+        eAway *= ratio;
+    }
 
-    // 4. CORNER PROJECTION (Poisson)
-    const expectedCornersHome = hCornersAvg;
-    const expectedCornersAway = aCornersAvg;
+    eHome = Math.max(eHome, 0.1);
+    eAway = Math.max(eAway, 0.1);
+
+    // 4. CORNER PROJECTION (Dampened v3.6)
+    const expectedCornersHome = hCornersAvg * DAMPENER;
+    const expectedCornersAway = aCornersAvg * DAMPENER;
     const totalExpectedCorners = expectedCornersHome + expectedCornersAway;
 
-    // Calculate Corner Probabilities using Cumulative Poisson
     const getProbOver = (lambda: number, threshold: number) => {
         let probUnderOrEqual = 0;
         for (let i = 0; i <= threshold; i++) {
@@ -117,7 +127,7 @@ export function calculatePoissonPrediction(
         over105: getProbOver(totalExpectedCorners, 10),
     };
 
-    console.log("🎯 CALIBRATED xG (v3.5):", { goals: (eHome + eAway).toFixed(2), corners: totalExpectedCorners.toFixed(1) });
+    console.log("🎯 V3.6 BIAS FIX PROJECTION:", { totalXG: (eHome + eAway).toFixed(2), totalCorners: totalExpectedCorners.toFixed(1) });
 
     // 5. Matrix & Winning Probabilities
     let hWin = 0, draw = 0, aWin = 0;
@@ -136,10 +146,10 @@ export function calculatePoissonPrediction(
         scoreMatrix.push(row);
     }
 
-    // Draw Dampener
-    if (draw > 0.35) {
-        const excess = draw - 0.35;
-        draw = 0.35;
+    // Draw Dampener (Stricter v3.6)
+    if (draw > 0.38) {
+        const excess = draw - 0.38;
+        draw = 0.38;
         hWin += excess / 2;
         aWin += excess / 2;
     }
@@ -160,7 +170,7 @@ export function calculatePoissonPrediction(
 }
 
 /**
- * RECOMMENDATION ENGINE (v3.5) - HIGH SELECTIVITY
+ * RECOMMENDATION ENGINE (v3.6) - ULTRA SELECTIVITY
  */
 export function getRecommendedBet(
     prediction: PredictionResult,
@@ -170,11 +180,11 @@ export function getRecommendedBet(
 ): string {
     const { homeWinProb, awayWinProb, drawProb, expectedGoalsHome, expectedGoalsAway, cornerProb } = prediction;
 
-    // 1. Trap / Confidence Win
-    if (homeWinProb > 0.60) return `${homeName} to Win`;
-    if (awayWinProb > 0.60) return `${awayName} to Win`;
+    // 1. Confidence Win (Raised to 62%)
+    if (homeWinProb > 0.62) return `${homeName} to Win`;
+    if (awayWinProb > 0.62) return `${awayName} to Win`;
 
-    // 2. Goal Analysis (Now requiring 60% confidence)
+    // 2. Goal Analysis (Now requiring 65% confidence - Ultra Selective)
     const probUnder25 =
         (poissonProb(0, expectedGoalsHome) * poissonProb(0, expectedGoalsAway)) +
         (poissonProb(0, expectedGoalsHome) * poissonProb(1, expectedGoalsAway)) +
@@ -185,14 +195,14 @@ export function getRecommendedBet(
 
     const probOver25 = 1 - probUnder25;
 
-    if (probOver25 >= 0.60) return "Over 2.5 Goals";
-    if (probUnder25 >= 0.60) return "Under 2.5 Goals";
+    if (probOver25 >= 0.65) return "Over 2.5 Goals";
+    if (probUnder25 >= 0.65) return "Under 2.5 Goals";
 
-    // 3. Corners (New logic)
-    if (cornerProb.over95 > 0.62) return "Over 9.5 Corners";
-    if (cornerProb.over85 < 0.35) return "Under 8.5 Corners";
+    // 3. Corners (High Selectivity v3.6)
+    if (cornerProb.over95 > 0.65) return "Over 9.5 Corners";
+    if (cornerProb.over85 < 0.30) return "Under 8.5 Corners";
 
-    if (drawProb > 0.32) return "Double Chance / Draw";
+    if (drawProb > 0.35) return "Double Chance / Draw";
     return "BTTS (Both Teams to Score)";
 }
 

@@ -9,10 +9,14 @@ interface StrategyProps {
     fixtureId: number;
     homeName: string;
     awayName: string;
+    leagueName?: string;
+    matchDate?: string;
     prediction: {
         homeProb: number;
         awayProb: number;
         expectedGoals: number;
+        xgHome?: number;
+        xgAway?: number;
         cornerProb?: {
             over85: number;
             over95: number;
@@ -23,7 +27,7 @@ interface StrategyProps {
     realOdds?: { home: number, draw: number, away: number };
 }
 
-export default function BettingStrategyCard({ fixtureId, homeName, awayName, prediction, recommendedBet, realOdds }: StrategyProps) {
+export default function BettingStrategyCard({ fixtureId, homeName, awayName, leagueName, matchDate, prediction, recommendedBet, realOdds }: StrategyProps) {
     const [saved, setSaved] = useState(false);
     const [loading, setLoading] = useState(false);
 
@@ -42,17 +46,16 @@ export default function BettingStrategyCard({ fixtureId, homeName, awayName, pre
         parlay: false
     });
 
-    // Dynamic Labels based on real prediction (v3.5)
+    // Dynamic Labels (v3.6 Stricter Thresholds)
     const winnerLabel = prediction.homeProb > prediction.awayProb ? `Winner: ${homeName}` : `Winner: ${awayName}`;
     const goalsLabel = prediction.expectedGoals > 2.5 ? "Goals: Over 2.5" : "Goals: Under 2.5";
 
-    // Corners Logic v3.5 (No longer hardcoded)
-    let cornersLabel = "Corners: Over 9.5";
+    // Corners Logic v3.6
+    let cornersLabel = "Corners: Under 9.5";
     if (recommendedBet.includes("Corners")) {
-        cornersLabel = recommendedBet.replace("Corners:", "").trim();
+        cornersLabel = recommendedBet;
     } else {
-        // Fallback to calculation if not primary recommendation
-        cornersLabel = (prediction as any).cornerProb?.over95 > 0.55 ? "Corners: Over 9.5" : "Corners: Under 9.5";
+        cornersLabel = prediction.cornerProb?.over95 && prediction.cornerProb.over95 > 0.65 ? "Corners: Over 9.5" : "Corners: Under 9.5";
     }
 
     const handleSave = async () => {
@@ -77,6 +80,14 @@ export default function BettingStrategyCard({ fixtureId, homeName, awayName, pre
             fixtureId,
             homeTeam: homeName,
             awayTeam: awayName,
+            leagueName,
+            matchDate,
+            prediction: {
+                outcome: prediction.homeProb > prediction.awayProb ? 'HOME' : 'AWAY',
+                probability: Math.max(prediction.homeProb, prediction.awayProb),
+                xgHome: prediction.xgHome || 0,
+                xgAway: prediction.xgAway || 0
+            },
             selections
         });
 

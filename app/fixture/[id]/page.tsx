@@ -14,6 +14,8 @@ import { generateExpertAnalysis } from "@/lib/analysis-text";
 import { calculateValue } from "@/lib/value-bet";
 import { Gem } from "lucide-react";
 
+export const dynamic = 'force-dynamic';
+
 
 // Helper for form badges
 const FormBadge = ({ result }: { result: string }) => {

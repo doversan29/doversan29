@@ -1,7 +1,7 @@
 'use server';
 
 import { db } from '@/lib/db/client';
-import { matchAnalysis, betOutcome, NewBetOutcome } from '@/lib/db/schema';
+import { matchAnalysis, betOutcome, NewBetOutcome, NewMatchAnalysis } from '@/lib/db/schema';
 import { revalidatePath } from 'next/cache';
 import { eq } from 'drizzle-orm';
 
@@ -9,6 +9,14 @@ export interface BetSelection {
     fixtureId: number;
     homeTeam: string;
     awayTeam: string;
+    leagueName?: string;
+    matchDate?: string;
+    prediction?: {
+        outcome: string;
+        probability: number;
+        xgHome: number;
+        xgAway: number;
+    };
     selections: {
         type: 'MONEYLINE' | 'GOALS' | 'CORNERS' | 'PARLAY';
         label: string;
@@ -18,31 +26,43 @@ export interface BetSelection {
 
 export async function saveUserSelection(data: BetSelection) {
     try {
-        console.log('Saving bet selection:', data);
+        console.log('Saving bet selection (v3.6):', data);
 
-        // 1. Find or Create Match Analysis Record (simplified for this demo, usually exists)
-        // We assume analysis exists because the page loaded. 
-        // We need the ID from match_analysis table.
-        // For now, let's look it up by fixture_id
-        const analysis = await db.select().from(matchAnalysis).where(eq(matchAnalysis.fixtureId, data.fixtureId)).limit(1);
+        // 1. Find or Auto-Create Match Analysis Record
+        let analysis = await db.select().from(matchAnalysis).where(eq(matchAnalysis.fixtureId, data.fixtureId)).limit(1);
+
+        let analysisId: number;
 
         if (!analysis.length) {
-            // In a real app we might create it here, but for now throw
-            console.error('Analysis not found for fixture', data.fixtureId);
-            return { success: false, message: 'Analysis not found' };
-        }
+            console.log('Analysis not found, creating record on-the-fly for fixture', data.fixtureId);
 
-        const analysisId = analysis[0].id;
+            const newAnalysis: NewMatchAnalysis = {
+                fixtureId: data.fixtureId,
+                homeTeam: data.homeTeam,
+                awayTeam: data.awayTeam,
+                leagueName: data.leagueName || 'Unknown League',
+                matchDate: data.matchDate ? new Date(data.matchDate) : new Date(),
+                predictedOutcome: data.prediction?.outcome || 'UNKNOWN',
+                aiProbability: data.prediction?.probability || 0,
+                expectedGoalsHome: data.prediction?.xgHome || 0,
+                expectedGoalsAway: data.prediction?.xgAway || 0,
+                strategyUsed: 'user_interactive_v3.6'
+            };
+
+            const inserted = await db.insert(matchAnalysis).values(newAnalysis).returning({ id: matchAnalysis.id });
+            analysisId = inserted[0].id;
+        } else {
+            analysisId = analysis[0].id;
+        }
 
         // 2. Insert Outcomes
         const records: NewBetOutcome[] = data.selections.map(sel => ({
             analysisId,
             status: 'pending',
             stakeAmount: 10, // Default unit
-            oddsRecommended: sel.odds, // Mapping to existing column
-            selectedOdds: sel.odds, // New column
-            betType: sel.type, // New column
-            // We could store the specific label in 'actualResult' or a new 'notes' column if needed
+            oddsRecommended: sel.odds,
+            selectedOdds: sel.odds,
+            betType: sel.type,
         }));
 
         await db.insert(betOutcome).values(records);
@@ -51,6 +71,6 @@ export async function saveUserSelection(data: BetSelection) {
         return { success: true, message: 'Jugada guardada correctamente' };
     } catch (error) {
         console.error('Error saving bet:', error);
-        return { success: false, message: 'Error al guardar jugada' };
+        return { success: false, message: 'Error al guardar jugada (v3.6)' };
     }
 }

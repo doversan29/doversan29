@@ -30,9 +30,7 @@ function poissonProb(k: number, lambda: number): number {
 }
 
 /**
- * POISSON ENGINE (v3.3 - CRITICAL MATH FIX)
- * Objective: Use AVERAGES instead of TOTALS to avoid Over 2.5 bias.
- * Handles Premium API stats (/teams/statistics) and Legacy stats (Standings).
+ * POISSON ENGINE (v3.4 - BIAS REMOVAL)
  */
 export function calculatePoissonPrediction(
     homeData: any,
@@ -43,89 +41,75 @@ export function calculatePoissonPrediction(
     seasonYear: number = new Date().getFullYear()
 ): PredictionResult {
 
-    // 1. DATA DETECTION & PARSING
-    const isPremium = (data: any) => data?.goals?.for?.average !== undefined;
+    // 1. DATA DETECTION
+    const isPremium = (data: any) => data?.goals?.for?.average?.home !== undefined;
 
-    let homeAttack: number;
-    let homeDefense: number;
-    let awayAttack: number;
-    let awayDefense: number;
+    let hAttack: number;
+    let hDefense: number;
+    let aAttack: number;
+    let aDefense: number;
+    let usesVenueSpecificAvg = false;
 
-    if (isPremium(homeData)) {
-        // v3.3: API-Football Premium returns averages as strings (e.g. "1.5")
-        // We MUST use Averages, not Totals.
-        const rawHomeScored = homeData.goals.for.average.home;
-        const rawHomeConceded = homeData.goals.against.average.home;
+    if (isPremium(homeData) && isPremium(awayData)) {
+        // PREMIUM MODE: Use Averaged Stats (Specific to Venue)
+        // If team plays at Home, use their Home Average.
+        hAttack = parseFloat(homeData.goals.for.average.home) || 1.25;
+        hDefense = parseFloat(homeData.goals.against.average.home) || 1.25;
+        aAttack = parseFloat(awayData.goals.for.average.away) || 1.15;
+        aDefense = parseFloat(awayData.goals.against.average.away) || 1.15;
+        usesVenueSpecificAvg = true;
 
-        homeAttack = parseFloat(rawHomeScored) || 1.25;
-        homeDefense = parseFloat(rawHomeConceded) || 1.25;
-
-        console.log("STATS DEBUG (HOME):", {
-            raw_avg_scored: rawHomeScored,
-            parsed: homeAttack,
-            raw_avg_conceded: rawHomeConceded,
-            parsed_def: homeDefense
-        });
+        console.log(`[PREMIUM v3.4] Analyzing with Venue-Specific Averages`);
     } else {
-        // Legacy path (Standings-based)
-        homeAttack = homeData.scored / Math.max(homeData.played, 1);
-        homeDefense = homeData.conceded / Math.max(homeData.played, 1);
-    }
-
-    if (isPremium(awayData)) {
-        const rawAwayScored = awayData.goals.for.average.away;
-        const rawAwayConceded = awayData.goals.against.average.away;
-
-        awayAttack = parseFloat(rawAwayScored) || 1.25;
-        awayDefense = parseFloat(rawAwayConceded) || 1.25;
-
-        console.log("STATS DEBUG (AWAY):", {
-            raw_avg_scored: rawAwayScored,
-            parsed: awayAttack,
-            raw_avg_conceded: rawAwayConceded,
-            parsed_def: awayDefense
-        });
-    } else {
-        awayAttack = awayData.scored / Math.max(awayData.played, 1);
-        awayDefense = awayData.conceded / Math.max(awayData.played, 1);
+        // LEGACY MODE: Fallback to global season averages from Standings
+        console.log(`[LEGACY v3.4] Analyzing with Season Global Averages`);
+        const getRate = (data: any, type: 'scored' | 'conceded') => {
+            const val = type === 'scored' ? data.scored : data.conceded;
+            return val / Math.max(data.played, 1);
+        };
+        hAttack = getRate(homeData, 'scored');
+        hDefense = getRate(homeData, 'conceded');
+        aAttack = getRate(awayData, 'scored');
+        aDefense = getRate(awayData, 'conceded');
+        usesVenueSpecificAvg = false;
     }
 
     // 2. STRENGTH NORMALIZATION relative to League
-    const hStrAttack = homeAttack / leagueAvgHomeGoals;
-    const hStrDefense = homeDefense / leagueAvgAwayGoals;
-    const aStrAttack = awayAttack / leagueAvgAwayGoals;
-    const aStrDefense = awayDefense / leagueAvgHomeGoals;
+    const hStrAttack = hAttack / leagueAvgHomeGoals;
+    const hStrDefense = hDefense / leagueAvgAwayGoals;
+    const aStrAttack = aAttack / leagueAvgAwayGoals;
+    const aStrDefense = aDefense / leagueAvgHomeGoals;
 
-    // 3. PROJECTED xG WITH HFA & SAFETY CAP
+    // 3. PROJECTED xG
     let expectedHome = hStrAttack * aStrDefense * leagueAvgHomeGoals;
     let expectedAway = aStrAttack * hStrDefense * leagueAvgAwayGoals;
 
-    // Force Home Advantage
-    if (!isNeutral) {
-        expectedHome *= 1.15;
+    // 4. SMART HOME ADVANTAGE (HFA)
+    // IMPORTANT: If we are using hAttack/aAttack which are ALREADY "Home" and "Away" averages,
+    // the HFA is already baked in. Do NOT multiply by 1.15 again or we inflate the score.
+    if (!isNeutral && !usesVenueSpecificAvg) {
+        expectedHome *= 1.15; // Only apply if using neutral/global season stats
     }
 
-    // MANDATORY SAFETY CAP (v3.3) - Prevent "Collapse to Overs"
-    expectedHome = Math.min(Math.max(expectedHome, 0.1), 3.50);
-    expectedAway = Math.min(Math.max(expectedAway, 0.1), 3.50);
+    // MANDATORY SAFETY CAP (v3.4)
+    expectedHome = Math.min(Math.max(expectedHome, 0.1), 3.40);
+    expectedAway = Math.min(Math.max(expectedAway, 0.1), 3.20);
 
-    console.log("🎯 CALIBRATED xG (v3.3):", { home: expectedHome.toFixed(2), away: expectedAway.toFixed(2) });
+    console.log("🎯 CALIBRATED xG (v3.4):", { home: expectedHome.toFixed(2), away: expectedAway.toFixed(2) });
 
-    // 4. Matrix & Winning Probabilities
-    const scoreMatrix: number[][] = [];
+    // 5. Matrix calculation
     let hWin = 0;
     let draw = 0;
     let aWin = 0;
+    const scoreMatrix: number[][] = [];
 
     for (let h = 0; h <= 5; h++) {
         const row: number[] = [];
         const probH = poissonProb(h, expectedHome);
-
         for (let a = 0; a <= 5; a++) {
             const probA = poissonProb(a, expectedAway);
             const probScore = probH * probA;
             row.push(probScore);
-
             if (h > a) hWin += probScore;
             else if (h === a) draw += probScore;
             else aWin += probScore;
@@ -133,7 +117,7 @@ export function calculatePoissonPrediction(
         scoreMatrix.push(row);
     }
 
-    // 5. DRAW DAMPENER (v2.7)
+    // 6. DRAW DAMPENER (v2.7)
     if (draw > 0.35) {
         const excess = draw - 0.35;
         draw = 0.35;
@@ -154,42 +138,8 @@ export function calculatePoissonPrediction(
 }
 
 /**
- * TRAP DETECTION
- */
-export function detectMarketTrap(
-    modelProb: number,
-    marketOdds: number
-): { isTrap: boolean; reasoning: string } {
-    if (!marketOdds || marketOdds <= 1) return { isTrap: false, reasoning: "" };
-    const fairOdds = 1 / modelProb;
-    const deviation = marketOdds / fairOdds;
-
-    if (deviation > 1.35) {
-        return {
-            isTrap: true,
-            reasoning: `Market odds (${marketOdds}) are ${((deviation - 1) * 100).toFixed(0)}% higher than fair odds (${fairOdds.toFixed(2)}).`
-        };
-    }
-    return { isTrap: false, reasoning: "" };
-}
-
-/**
- * WEIGHTED STATS (Legacy support)
- */
-export function calculateWeightedStats(seasonStats: TeamStats, recentStats: TeamStats, recentWeight: number = 0.4): TeamStats {
-    const seasonWeight = 1 - recentWeight;
-    const sPlayed = Math.max(seasonStats.played, 1);
-    const rPlayed = Math.max(recentStats.played, 1);
-
-    return {
-        played: Math.max(seasonStats.played, 1),
-        scored: (seasonStats.scored / sPlayed * seasonWeight) + (recentStats.scored / rPlayed * recentWeight),
-        conceded: (seasonStats.conceded / sPlayed * seasonWeight) + (recentStats.conceded / rPlayed * recentWeight)
-    };
-}
-
-/**
- * RECOMMENDATION ENGINE
+ * RECOMMENDATION ENGINE (v3.4)
+ * Selectivity increase to avoid "All Overs" bias.
  */
 export function getRecommendedBet(
     prediction: PredictionResult,
@@ -199,17 +149,17 @@ export function getRecommendedBet(
 ): string {
     const { homeWinProb, awayWinProb, drawProb, expectedGoalsHome, expectedGoalsAway } = prediction;
 
+    // 1. Trap Detection
     if (marketOdds) {
         const homeTrap = detectMarketTrap(homeWinProb, marketOdds.home);
-        const awayTrap = detectMarketTrap(awayWinProb, marketOdds.away);
-        if (homeTrap.isTrap || awayTrap.isTrap) {
-            return `⚠️ TRAP ALERT: Market odds are suspiciously high. SKIP.`;
-        }
+        if (homeTrap.isTrap) return `⚠️ TRAP ALERT: Market odds are suspiciously high. SKIP.`;
     }
 
-    if (homeWinProb > 0.52) return `${homeName} to Win`;
-    if (awayWinProb > 0.52) return `${awayName} to Win`;
+    // 2. High Confidence Winners (>55%)
+    if (homeWinProb > 0.55) return `${homeName} to Win`;
+    if (awayWinProb > 0.55) return `${awayName} to Win`;
 
+    // 3. Goal Analysis (More Selective v3.4)
     const probUnder25 =
         (poissonProb(0, expectedGoalsHome) * poissonProb(0, expectedGoalsAway)) +
         (poissonProb(0, expectedGoalsHome) * poissonProb(1, expectedGoalsAway)) +
@@ -220,9 +170,26 @@ export function getRecommendedBet(
 
     const probOver25 = 1 - probUnder25;
 
-    if (probOver25 >= 0.50) return "Over 2.5 Goals";
-    if (probUnder25 >= 0.55) return "Under 2.5 Goals";
+    // We only recommend Over 2.5 if probability is > 58% (High Selectivity)
+    if (probOver25 >= 0.58) return "Over 2.5 Goals";
+    if (probUnder25 >= 0.58) return "Under 2.5 Goals";
 
-    if (drawProb > 0.30) return "Double Chance / Draw Predicted";
+    // 4. Defaults
+    if (drawProb > 0.32) return "Double Chance / Draw Predicted";
     return "BTTS / Both to Score";
+}
+
+export function detectMarketTrap(prob: number, odds: number) {
+    if (!odds || odds <= 1) return { isTrap: false };
+    const fair = 1 / prob;
+    return { isTrap: odds > fair * 1.35 };
+}
+
+export function calculateWeightedStats(season: TeamStats, recent: TeamStats, weight: number) {
+    // Legacy support
+    return {
+        played: season.played,
+        scored: (season.scored / season.played * (1 - weight)) + (recent.scored * weight),
+        conceded: (season.conceded / season.played * (1 - weight)) + (recent.conceded * weight),
+    };
 }

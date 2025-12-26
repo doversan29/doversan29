@@ -36,10 +36,18 @@ export default function BettingStrategyCard({ fixtureId, homeName, awayName, pre
         parlay: false
     });
 
-    // Dynamic Labels based on prediction
+    // Dynamic Labels based on real prediction (v3.5)
     const winnerLabel = prediction.homeProb > prediction.awayProb ? `Winner: ${homeName}` : `Winner: ${awayName}`;
-    const goalsLabel = prediction.expectedGoals > 2.6 ? "Goals: Over 2.5" : "Goals: Under 2.5";
-    const cornersLabel = "Corners: Over 9.5"; // Placeholder
+    const goalsLabel = prediction.expectedGoals > 2.5 ? "Goals: Over 2.5" : "Goals: Under 2.5";
+
+    // Corners Logic v3.5 (No longer hardcoded)
+    let cornersLabel = "Corners: Over 9.5";
+    if (recommendedBet.includes("Corners")) {
+        cornersLabel = recommendedBet.replace("Corners:", "").trim();
+    } else {
+        // Fallback to calculation if not primary recommendation
+        cornersLabel = (prediction as any).cornerProb?.over95 > 0.55 ? "Corners: Over 9.5" : "Corners: Under 9.5";
+    }
 
     const handleSave = async () => {
         setLoading(true);

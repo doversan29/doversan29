@@ -12,6 +12,13 @@ export interface PredictionResult {
     scoreMatrix: number[][]; // 6x6 matrix (0-5 goals)
     expectedGoalsHome: number;
     expectedGoalsAway: number;
+    expectedCornersHome: number;
+    expectedCornersAway: number;
+    cornerProb: {
+        over85: number;
+        over95: number;
+        over105: number;
+    };
     isTrap?: boolean;
 }
 
@@ -30,7 +37,7 @@ function poissonProb(k: number, lambda: number): number {
 }
 
 /**
- * POISSON ENGINE (v3.4 - BIAS REMOVAL)
+ * POISSON ENGINE (v3.5 - ANTI-BIAS & CORNER QUANT)
  */
 export function calculatePoissonPrediction(
     homeData: any,
@@ -44,80 +51,92 @@ export function calculatePoissonPrediction(
     // 1. DATA DETECTION
     const isPremium = (data: any) => data?.goals?.for?.average?.home !== undefined;
 
-    let hAttack: number;
-    let hDefense: number;
-    let aAttack: number;
-    let aDefense: number;
+    let hAttack: number, hDefense: number;
+    let aAttack: number, aDefense: number;
+    let hCornersAvg: number = 5.0, aCornersAvg: number = 4.5;
     let usesVenueSpecificAvg = false;
 
     if (isPremium(homeData) && isPremium(awayData)) {
         // PREMIUM MODE: Use Averaged Stats (Specific to Venue)
-        // If team plays at Home, use their Home Average.
         hAttack = parseFloat(homeData.goals.for.average.home) || 1.25;
         hDefense = parseFloat(homeData.goals.against.average.home) || 1.25;
         aAttack = parseFloat(awayData.goals.for.average.away) || 1.15;
         aDefense = parseFloat(awayData.goals.against.average.away) || 1.15;
-        usesVenueSpecificAvg = true;
 
-        console.log(`[PREMIUM v3.4] Analyzing with Venue-Specific Averages`);
+        // CORNER DATA (From Premium API)
+        hCornersAvg = parseFloat(homeData.corners?.average?.home) || 5.0;
+        aCornersAvg = parseFloat(awayData.corners?.average?.away) || 4.5;
+
+        usesVenueSpecificAvg = true;
+        console.log(`[PREMIUM v3.5] Engine running with Real Corner Data: H=${hCornersAvg}, A=${aCornersAvg}`);
     } else {
-        // LEGACY MODE: Fallback to global season averages from Standings
-        console.log(`[LEGACY v3.4] Analyzing with Season Global Averages`);
-        const getRate = (data: any, type: 'scored' | 'conceded') => {
-            const val = type === 'scored' ? data.scored : data.conceded;
-            return val / Math.max(data.played, 1);
-        };
+        // LEGACY MODE
+        const getRate = (data: any, type: 'scored' | 'conceded') => (type === 'scored' ? data.scored : data.conceded) / Math.max(data.played, 1);
         hAttack = getRate(homeData, 'scored');
         hDefense = getRate(homeData, 'conceded');
         aAttack = getRate(awayData, 'scored');
         aDefense = getRate(awayData, 'conceded');
-        usesVenueSpecificAvg = false;
     }
 
-    // 2. STRENGTH NORMALIZATION relative to League
-    const hStrAttack = hAttack / leagueAvgHomeGoals;
-    const hStrDefense = hDefense / leagueAvgAwayGoals;
-    const aStrAttack = aAttack / leagueAvgAwayGoals;
-    const aStrDefense = aDefense / leagueAvgHomeGoals;
+    // 2. STRENGTH NORMALIZATION
+    // We strictly limit max strength to avoid "All Overs"
+    const normalize = (val: number, avg: number) => Math.min(val / avg, 2.2);
+    const hStrAttack = normalize(hAttack, leagueAvgHomeGoals);
+    const hStrDefense = normalize(hDefense, leagueAvgAwayGoals);
+    const aStrAttack = normalize(aAttack, leagueAvgAwayGoals);
+    const aStrDefense = normalize(aDefense, leagueAvgHomeGoals);
 
     // 3. PROJECTED xG
-    let expectedHome = hStrAttack * aStrDefense * leagueAvgHomeGoals;
-    let expectedAway = aStrAttack * hStrDefense * leagueAvgAwayGoals;
+    let eHome = hStrAttack * aStrDefense * leagueAvgHomeGoals;
+    let eAway = aStrAttack * hStrDefense * leagueAvgAwayGoals;
 
-    // 4. SMART HOME ADVANTAGE (HFA)
-    // IMPORTANT: If we are using hAttack/aAttack which are ALREADY "Home" and "Away" averages,
-    // the HFA is already baked in. Do NOT multiply by 1.15 again or we inflate the score.
-    if (!isNeutral && !usesVenueSpecificAvg) {
-        expectedHome *= 1.15; // Only apply if using neutral/global season stats
-    }
+    // No HFA on Premium (already included in home-specific average)
+    if (!isNeutral && !usesVenueSpecificAvg) eHome *= 1.15;
 
-    // MANDATORY SAFETY CAP (v3.4)
-    expectedHome = Math.min(Math.max(expectedHome, 0.1), 3.40);
-    expectedAway = Math.min(Math.max(expectedAway, 0.1), 3.20);
+    // MANDATORY SAFETY CAPS
+    eHome = Math.min(Math.max(eHome, 0.1), 3.20);
+    eAway = Math.min(Math.max(eAway, 0.1), 3.00);
 
-    console.log("🎯 CALIBRATED xG (v3.4):", { home: expectedHome.toFixed(2), away: expectedAway.toFixed(2) });
+    // 4. CORNER PROJECTION (Poisson)
+    const expectedCornersHome = hCornersAvg;
+    const expectedCornersAway = aCornersAvg;
+    const totalExpectedCorners = expectedCornersHome + expectedCornersAway;
 
-    // 5. Matrix calculation
-    let hWin = 0;
-    let draw = 0;
-    let aWin = 0;
+    // Calculate Corner Probabilities using Cumulative Poisson
+    const getProbOver = (lambda: number, threshold: number) => {
+        let probUnderOrEqual = 0;
+        for (let i = 0; i <= threshold; i++) {
+            probUnderOrEqual += poissonProb(i, lambda);
+        }
+        return 1 - probUnderOrEqual;
+    };
+
+    const cornerProb = {
+        over85: getProbOver(totalExpectedCorners, 8),
+        over95: getProbOver(totalExpectedCorners, 9),
+        over105: getProbOver(totalExpectedCorners, 10),
+    };
+
+    console.log("🎯 CALIBRATED xG (v3.5):", { goals: (eHome + eAway).toFixed(2), corners: totalExpectedCorners.toFixed(1) });
+
+    // 5. Matrix & Winning Probabilities
+    let hWin = 0, draw = 0, aWin = 0;
     const scoreMatrix: number[][] = [];
-
     for (let h = 0; h <= 5; h++) {
         const row: number[] = [];
-        const probH = poissonProb(h, expectedHome);
+        const pH = poissonProb(h, eHome);
         for (let a = 0; a <= 5; a++) {
-            const probA = poissonProb(a, expectedAway);
-            const probScore = probH * probA;
-            row.push(probScore);
-            if (h > a) hWin += probScore;
-            else if (h === a) draw += probScore;
-            else aWin += probScore;
+            const pA = poissonProb(a, eAway);
+            const pScore = pH * pA;
+            row.push(pScore);
+            if (h > a) hWin += pScore;
+            else if (h === a) draw += pScore;
+            else aWin += pScore;
         }
         scoreMatrix.push(row);
     }
 
-    // 6. DRAW DAMPENER (v2.7)
+    // Draw Dampener
     if (draw > 0.35) {
         const excess = draw - 0.35;
         draw = 0.35;
@@ -132,14 +151,16 @@ export function calculatePoissonPrediction(
         drawProb: draw / total,
         awayWinProb: aWin / total,
         scoreMatrix,
-        expectedGoalsHome: expectedHome,
-        expectedGoalsAway: expectedAway
+        expectedGoalsHome: eHome,
+        expectedGoalsAway: eAway,
+        expectedCornersHome,
+        expectedCornersAway,
+        cornerProb
     };
 }
 
 /**
- * RECOMMENDATION ENGINE (v3.4)
- * Selectivity increase to avoid "All Overs" bias.
+ * RECOMMENDATION ENGINE (v3.5) - HIGH SELECTIVITY
  */
 export function getRecommendedBet(
     prediction: PredictionResult,
@@ -147,46 +168,40 @@ export function getRecommendedBet(
     awayName: string,
     marketOdds?: { home: number, draw: number, away: number }
 ): string {
-    const { homeWinProb, awayWinProb, drawProb, expectedGoalsHome, expectedGoalsAway } = prediction;
+    const { homeWinProb, awayWinProb, drawProb, expectedGoalsHome, expectedGoalsAway, cornerProb } = prediction;
 
-    // 1. Trap Detection
-    if (marketOdds) {
-        const homeTrap = detectMarketTrap(homeWinProb, marketOdds.home);
-        if (homeTrap.isTrap) return `⚠️ TRAP ALERT: Market odds are suspiciously high. SKIP.`;
-    }
+    // 1. Trap / Confidence Win
+    if (homeWinProb > 0.60) return `${homeName} to Win`;
+    if (awayWinProb > 0.60) return `${awayName} to Win`;
 
-    // 2. High Confidence Winners (>55%)
-    if (homeWinProb > 0.55) return `${homeName} to Win`;
-    if (awayWinProb > 0.55) return `${awayName} to Win`;
-
-    // 3. Goal Analysis (More Selective v3.4)
+    // 2. Goal Analysis (Now requiring 60% confidence)
     const probUnder25 =
         (poissonProb(0, expectedGoalsHome) * poissonProb(0, expectedGoalsAway)) +
         (poissonProb(0, expectedGoalsHome) * poissonProb(1, expectedGoalsAway)) +
-        (poissonProb(0, expectedGoalsHome) * poissonProb(2, expectedGoalsAway)) +
         (poissonProb(1, expectedGoalsHome) * poissonProb(0, expectedGoalsAway)) +
         (poissonProb(1, expectedGoalsHome) * poissonProb(1, expectedGoalsAway)) +
-        (poissonProb(2, expectedGoalsHome) * poissonProb(0, expectedGoalsAway));
+        (poissonProb(2, expectedGoalsHome) * poissonProb(0, expectedGoalsAway)) +
+        (poissonProb(0, expectedGoalsHome) * poissonProb(2, expectedGoalsAway));
 
     const probOver25 = 1 - probUnder25;
 
-    // We only recommend Over 2.5 if probability is > 58% (High Selectivity)
-    if (probOver25 >= 0.58) return "Over 2.5 Goals";
-    if (probUnder25 >= 0.58) return "Under 2.5 Goals";
+    if (probOver25 >= 0.60) return "Over 2.5 Goals";
+    if (probUnder25 >= 0.60) return "Under 2.5 Goals";
 
-    // 4. Defaults
-    if (drawProb > 0.32) return "Double Chance / Draw Predicted";
-    return "BTTS / Both to Score";
+    // 3. Corners (New logic)
+    if (cornerProb.over95 > 0.62) return "Over 9.5 Corners";
+    if (cornerProb.over85 < 0.35) return "Under 8.5 Corners";
+
+    if (drawProb > 0.32) return "Double Chance / Draw";
+    return "BTTS (Both Teams to Score)";
 }
 
 export function detectMarketTrap(prob: number, odds: number) {
     if (!odds || odds <= 1) return { isTrap: false };
-    const fair = 1 / prob;
-    return { isTrap: odds > fair * 1.35 };
+    return { isTrap: odds > (1 / prob) * 1.35 };
 }
 
 export function calculateWeightedStats(season: TeamStats, recent: TeamStats, weight: number) {
-    // Legacy support
     return {
         played: season.played,
         scored: (season.scored / season.played * (1 - weight)) + (recent.scored * weight),

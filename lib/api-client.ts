@@ -1,5 +1,6 @@
 import { UPCOMING_DAYS, CACHE_DURATION_FIXTURES } from './config';
 import { format, addDays } from 'date-fns';
+import { fetchWithRetry } from './fetch-robust';
 
 const API_KEY = process.env.API_FOOTBALL_KEY || "5ffa52153e4dbe8ee79e4b4bad4e532f";
 const BASE_URL = process.env.API_FOOTBALL_BASE_URL || "https://v3.football.api-sports.io";
@@ -26,7 +27,7 @@ export async function fetchApi(endpoint: string, params: Record<string, any> = {
 
     console.log(`[API REQUEST] ${url.toString()} (Key: ${API_KEY ? 'Set' : 'Missing'})`);
 
-    const res = await fetch(url.toString(), {
+    const res = await fetchWithRetry(url.toString(), {
         headers: {
             'x-rapidapi-key': API_KEY || '',
             'x-rapidapi-host': 'v3.football.api-sports.io'
@@ -35,7 +36,7 @@ export async function fetchApi(endpoint: string, params: Record<string, any> = {
             revalidate: options.revalidate ?? 3600, // Keep Next.js cache
             tags: options.tags
         }
-    });
+    } as any); // Type cast for Next.js fetch options compatibility
 
     console.log(`[API RESPONSE] Status: ${res.status}`);
 
@@ -47,18 +48,48 @@ export async function fetchApi(endpoint: string, params: Record<string, any> = {
             console.warn("API Rate Limit Exceeded");
             throw new Error("RateLimitExceeded");
         }
-        throw new Error(`API Error ${res.status}: ${res.statusText}`);
+        return null; // Return null instead of throwing to prevent fatal crashes
     }
 
     const data = await res.json();
 
     if (data.errors && Object.keys(data.errors).length > 0) {
         console.error(`API Error for ${endpoint}:`, JSON.stringify(data.errors, null, 2));
-        // Throwing error to be caught by caller
-        throw new Error(JSON.stringify(data.errors));
+        return null;
     }
 
     return data.response;
+}
+
+/**
+ * Fetch real-time odds for a specific fixture and bookmaker (Default: Bet365 ID 1)
+ */
+export async function getMarketOdds(fixtureId: number, bookmakerId: number = 1) {
+    try {
+        const data = await fetchApi('odds', {
+            fixture: fixtureId,
+            bookmaker: bookmakerId
+        });
+
+        if (data && data.length > 0 && data[0].bookmakers) {
+            const bets = data[0].bookmakers[0].bets;
+            const matchWinner = bets.find((b: any) => b.name === "Match Winner" || b.id === 1);
+
+            if (matchWinner) {
+                const values = matchWinner.values;
+                return {
+                    home: parseFloat(values.find((v: any) => v.value === "Home")?.odd || "0"),
+                    draw: parseFloat(values.find((v: any) => v.value === "Draw")?.odd || "0"),
+                    away: parseFloat(values.find((v: any) => v.value === "Away")?.odd || "0"),
+                    source: data[0].bookmakers[0].name
+                };
+            }
+        }
+        return null;
+    } catch (error) {
+        console.error(`Error fetching market odds for fixture ${fixtureId}:`, error);
+        return null;
+    }
 }
 
 export async function getUpcomingFixtures(leagueIds: number[]): Promise<any[]> {

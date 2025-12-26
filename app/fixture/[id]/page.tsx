@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { es } from 'date-fns/locale';
 import Link from "next/link";
 import { ArrowLeft, TrendingUp, AlertCircle, Calculator, History, Activity, Flame, Snowflake, Clock, User } from "lucide-react";
-import { getFixtureById, getLeagueStandings, getLeagueHistory } from "@/lib/api-client";
+import { getFixtureById, getLeagueStandings, getLeagueHistory, getMarketOdds } from "@/lib/api-client";
 import { getMatchOdds } from "@/lib/odds";
 import ValueBetCalculator from "@/components/ValueBetCalculator";
 import BettingStrategyCard from "@/components/BettingStrategyCard";
@@ -95,7 +95,7 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
     const [standings, history, realOdds] = await Promise.all([
         getLeagueStandings(fixture.league.id, fixture.league.season),
         getLeagueHistory(fixture.league.id, fixture.league.season),
-        getMatchOdds(fixture.fixture.id)
+        getMarketOdds(fixture.fixture.id, 1) // Bet365 ID 1
     ]);
 
     // Calculate Advanced Form
@@ -194,7 +194,7 @@ export default async function FixturePage({ params }: { params: Promise<{ id: st
         awayWeighted
     );
 
-    const recommendedBet = getRecommendedBet(prediction, fixture.teams.home.name, fixture.teams.away.name);
+    const recommendedBet = getRecommendedBet(prediction, fixture.teams.home.name, fixture.teams.away.name, realOdds || undefined);
 
     // ... EXPERT ANALYSIS SECTION (Modified) ...
     return (

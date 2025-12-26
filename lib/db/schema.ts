@@ -42,6 +42,7 @@ export const matchAnalysis = pgTable('match_analysis', {
   analysisReasoning: text('analysis_reasoning'), // Texto del "Expert Analysis"
   valueEdge: real('value_edge'), // % de ventaja detectada
   strategyUsed: text('strategy_used').notNull().default('poisson_basic'), // 'poisson_basic', 'monte_carlo', etc.
+  isTrap: boolean('is_trap').default(false), // Flag for suspicious market lines (v2.5)
 
   createdAt: timestamp('created_at').defaultNow().notNull()
 });
@@ -132,6 +133,14 @@ export const teamFlags = pgTable('team_flags', {
   updatedAt: timestamp('updated_at').defaultNow()
 });
 
+export const systemLogs = pgTable('system_logs', {
+  id: serial('id').primaryKey(),
+  level: text('level').notNull(), // 'INFO', 'WARN', 'ERROR', 'CRITICAL'
+  message: text('message').notNull(),
+  meta: jsonb('meta'), // Additional context
+  timestamp: timestamp('timestamp').defaultNow().notNull()
+});
+
 // Tipos TypeScript derivados
 export type UserBankroll = typeof userBankroll.$inferSelect;
 export type NewUserBankroll = typeof userBankroll.$inferInsert;
@@ -150,3 +159,6 @@ export type NewModelCalibration = typeof modelCalibration.$inferInsert;
 
 export type TeamFlags = typeof teamFlags.$inferSelect;
 export type NewTeamFlags = typeof teamFlags.$inferInsert;
+
+export type SystemLog = typeof systemLogs.$inferSelect;
+export type NewSystemLog = typeof systemLogs.$inferInsert;
